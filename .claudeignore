@@ -1,0 +1,37 @@
+# Secretos y entorno — NUNCA en contexto ni en el repo
+.env
+.env.*
+*.env
+**/secrets/**
+*.pem
+*.key
+credentials.json
+service-account*.json
+.railway/
+.supabase/
+
+# Dependencias y entornos virtuales
+.venv/
+venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+
+# Artefactos de build y logs
+dist/
+build/
+*.log
+*.sqlite
+*.db
+
+# Lockfiles grandes (poco útiles como contexto)
+poetry.lock
+uv.lock
+
+# Sistema
+.DS_Store
+.idea/
+.vscode/

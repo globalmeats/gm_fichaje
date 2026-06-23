@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(uvicorn:*)",
+      "Bash(pip install:*)",
+      "Bash(pip-compile:*)",
+      "Bash(ruff:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(mypy:*)",
+      "Bash(mise:*)",
+      "Bash(alembic:*)",
+      "Bash(python .claude/skills/legal-compliance/scripts/compliance_check.py:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(railway up:*)",
+      "Bash(railway run:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase db reset:*)",
+      "Bash(rm -rf:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/secrets/**)"
+    ]
+  }
+}

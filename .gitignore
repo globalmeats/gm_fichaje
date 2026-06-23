@@ -1,0 +1,65 @@
+# ---- Secretos y entorno (NUNCA versionar) ----
+.env
+.env.*
+!.env.example
+*.env
+**/secrets/**
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+*.so
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Test / type-check / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ---- Base de datos local ----
+*.sqlite
+*.sqlite3
+*.db
+
+# ---- Despliegue / herramientas ----
+.railway/
+.supabase/
+# mise: ignora estado local pero versiona la config (.mise.toml / .tool-versions sí van)
+.mise/
+mise.local.toml
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Editores / sistema ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- Claude Code ----
+# La config de equipo (.claude/settings.json) SÍ se versiona.
+# Los ajustes locales personales, no:
+.claude/settings.local.json
