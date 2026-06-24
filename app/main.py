@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import admin, auth, fichaje
+from app.api import admin, auth, fichaje, reports
 from app.core.config import assert_eu_region
 
 
@@ -26,6 +26,7 @@ app = FastAPI(title="Fichajes Global Meats", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(fichaje.router)
+app.include_router(reports.router)
 
 
 @app.get("/health", tags=["health"])

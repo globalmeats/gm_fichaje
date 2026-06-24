@@ -139,10 +139,7 @@ def period_window(now: datetime, period: str) -> tuple[datetime, datetime]:
 
 
 def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> dict:
-    """Suma el tiempo efectivo de las jornadas cerradas dentro del periodo actual.
-
-    El reparto ordinarias/extra se deja a Fase 3; aquí solo el agregado efectivo.
-    """
+    """Suma el tiempo efectivo de las jornadas cerradas dentro del periodo actual."""
     start, end = period_window(now, policy.computation_period)
     total = timedelta(0)
     for j in reconstruct_journeys(records):
@@ -153,4 +150,27 @@ def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> di
         "period": policy.computation_period,
         "start": start,
         "end": end,
+    }
+
+
+def classify_overtime(records: list[_Record], policy: _Policy, now: datetime) -> dict:
+    """Reparte el efectivo del periodo en ordinarias/extra (REQ-08, REQ-12).
+
+    El exceso se mide SOBRE EL PERIODO (no por día): un día largo compensado con días
+    cortos dentro del mismo periodo no genera horas extra. La jornada ordinaria del periodo
+    la fija `time_policy.ordinary_hours_per_period` (ajustable en runtime, REQ-13).
+    """
+    summary = period_summary(records, policy, now)
+    efectivo = summary["efectivo"]
+    ordinary = timedelta(hours=float(policy.ordinary_hours_per_period))
+    extra = max(efectivo - ordinary, timedelta(0))
+    ordinarias = min(efectivo, ordinary)
+    return {
+        "efectivo": efectivo,
+        "ordinarias": ordinarias,
+        "extra": extra,
+        "ordinary": ordinary,
+        "period": summary["period"],
+        "start": summary["start"],
+        "end": summary["end"],
     }
