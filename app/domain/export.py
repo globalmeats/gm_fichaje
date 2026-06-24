@@ -16,6 +16,7 @@ from typing import Protocol
 
 from fpdf import FPDF
 
+from app.core.crypto import decrypt_geo
 from app.core.time import iso8601, utc_now
 from app.schemas.export import ExportCorrectionRow, ExportRecordRow, ExportReport
 
@@ -39,11 +40,16 @@ def build_report(worker: _Worker, records: list, corrections: list, summary: dic
 
     rows: list[ExportRecordRow] = []
     for r in records:
+        # La geo se almacena cifrada (REQ-20/23): se descifra para mostrarla en el informe;
+        # el sellado (hash) sigue calculado sobre el ciphertext, así el informe es verificable.
         corr_rows = [
             ExportCorrectionRow(
                 seq=c.seq,
                 field=c.field,
-                corrected_value=c.corrected_value,
+                corrected_value=(
+                    decrypt_geo(c.corrected_value) or "" if c.field == "geo"
+                    else c.corrected_value
+                ),
                 reason=c.reason,
                 author_id=c.author_id,
                 occurred_at=c.occurred_at,
@@ -59,7 +65,7 @@ def build_report(worker: _Worker, records: list, corrections: list, summary: dic
                 modalidad=r.modalidad,
                 source=r.source,
                 travel_computes=r.travel_computes,
-                geo=r.geo,
+                geo=decrypt_geo(r.geo),
                 prev_hash=r.prev_hash,
                 hash=r.hash,
                 corrections=corr_rows,
@@ -76,6 +82,7 @@ def build_report(worker: _Worker, records: list, corrections: list, summary: dic
         efectivo_min=_minutes(summary["efectivo"]),
         ordinarias_min=_minutes(summary["ordinarias"]),
         extra_min=_minutes(summary["extra"]),
+        complementarias_min=_minutes(summary["complementarias"]),
         ordinary_min=_minutes(summary["ordinary"]),
         generated_at=utc_now(),
         records=rows,
@@ -97,6 +104,7 @@ def to_csv(report: ExportReport) -> str:
     w.writerow(["efectivo_min", report.efectivo_min])
     w.writerow(["ordinarias_min", report.ordinarias_min])
     w.writerow(["extra_min", report.extra_min])
+    w.writerow(["complementarias_min", report.complementarias_min])
     w.writerow(["ordinary_min", report.ordinary_min])
     w.writerow(["generado", iso8601(report.generated_at)])
     w.writerow([])
@@ -149,7 +157,8 @@ def to_pdf(report: ExportReport) -> bytes:
         (
             "Totales (min)",
             f"efectivo {report.efectivo_min} | ordinarias {report.ordinarias_min} | "
-            f"extra {report.extra_min} | jornada {report.ordinary_min}",
+            f"extra {report.extra_min} | complementarias {report.complementarias_min} | "
+            f"jornada {report.ordinary_min}",
         ),
         ("Generado", iso8601(report.generated_at)),
     ]:

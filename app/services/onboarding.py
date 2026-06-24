@@ -37,6 +37,9 @@ async def create_employee(
     last_name: str,
     role: str = "empleado",
     created_by: uuid.UUID | None = None,
+    relation_type: str = "ordinaria",
+    usuaria_id: uuid.UUID | None = None,
+    geo_consent: bool = False,
 ) -> CreatedWorker:
     """Crea un trabajador. Reintenta con el siguiente código si la UNIQUE choca."""
     pin = generate_pin()
@@ -56,6 +59,9 @@ async def create_employee(
             pin_temporary=True,
             role=role,
             created_by=created_by,
+            relation_type=relation_type,
+            usuaria_id=usuaria_id,
+            geo_consent=geo_consent,
         )
         db.add(worker)
         try:

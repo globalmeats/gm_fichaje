@@ -153,22 +153,39 @@ def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> di
     }
 
 
-def classify_overtime(records: list[_Record], policy: _Policy, now: datetime) -> dict:
-    """Reparte el efectivo del periodo en ordinarias/extra (REQ-08, REQ-12).
+def classify_overtime(
+    records: list[_Record],
+    policy: _Policy,
+    now: datetime,
+    relation_type: str = "ordinaria",
+) -> dict:
+    """Reparte el efectivo del periodo en ordinarias/extra/complementarias (REQ-08,12,26).
 
     El exceso se mide SOBRE EL PERIODO (no por día): un día largo compensado con días
     cortos dentro del mismo periodo no genera horas extra. La jornada ordinaria del periodo
     la fija `time_policy.ordinary_hours_per_period` (ajustable en runtime, REQ-13).
+
+    REQ-26 (desglose): en un contrato a TIEMPO PARCIAL el exceso sobre la jornada pactada NO
+    son horas extra sino COMPLEMENTARIAS (régimen distinto: pactadas, con límites y preaviso).
+    Para `relation_type='tiempo_parcial'` el exceso se etiqueta como `complementarias` y
+    `extra` queda a cero; en cualquier otra relación, al revés.
     """
     summary = period_summary(records, policy, now)
     efectivo = summary["efectivo"]
     ordinary = timedelta(hours=float(policy.ordinary_hours_per_period))
-    extra = max(efectivo - ordinary, timedelta(0))
+    exceso = max(efectivo - ordinary, timedelta(0))
     ordinarias = min(efectivo, ordinary)
+    if relation_type == "tiempo_parcial":
+        extra = timedelta(0)
+        complementarias = exceso
+    else:
+        extra = exceso
+        complementarias = timedelta(0)
     return {
         "efectivo": efectivo,
         "ordinarias": ordinarias,
         "extra": extra,
+        "complementarias": complementarias,
         "ordinary": ordinary,
         "period": summary["period"],
         "start": summary["start"],

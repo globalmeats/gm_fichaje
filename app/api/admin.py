@@ -41,6 +41,9 @@ async def admin_create_worker(
         last_name=body.last_name,
         role=body.role,
         created_by=uuid.UUID(claims["worker_id"]),
+        relation_type=body.relation_type,
+        usuaria_id=body.usuaria_id,
+        geo_consent=body.geo_consent,
     )
     return WorkerCreatedResponse(
         id=created.id,

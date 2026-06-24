@@ -21,6 +21,28 @@ class FichajeEventRequest(BaseModel):
     # Solo se lee en travel_*. Polaridad: true = ese desplazamiento computa como tiempo
     # efectivo (no se resta); false = no computa (se resta). Por defecto computa.
     travel_computes: bool = True
+    # Geolocalización PUNTUAL del instante del fichaje (REQ-20). Solo se almacena (cifrada) si
+    # el trabajador tiene consentimiento y la modalidad es móvil; en otro caso se descarta.
+    geo: str | None = None
+
+
+class OfflineEventRequest(BaseModel):
+    """Evento capturado SIN red y sincronizado a posteriori (REQ-22).
+
+    Excepción deliberada y acotada a REQ-15 (hora de servidor): este evento conserva la hora
+    REAL del fichaje (`occurred_at` del cliente), validada dentro de una ventana de tolerancia.
+    `client_event_id` es la clave de idempotencia de la cola de sincronización (queue): reenviar
+    el mismo evento no lo duplica.
+    """
+
+    event_type: Literal[
+        "check_in", "check_out", "break_start", "break_end", "travel_start", "travel_end"
+    ]
+    occurred_at: datetime
+    client_event_id: str = Field(..., min_length=1, max_length=200)
+    modalidad: Literal["presencial", "teletrabajo", "movil"] = "presencial"
+    travel_computes: bool = True
+    geo: str | None = None
 
 
 class FichajeEventResponse(BaseModel):
@@ -30,6 +52,12 @@ class FichajeEventResponse(BaseModel):
     occurred_at: datetime
     prev_hash: str
     hash: str
+
+
+class SyncEventResponse(FichajeEventResponse):
+    """Respuesta de `/fichaje/sync`. `deduplicated=True` si el evento ya estaba sincronizado."""
+
+    deduplicated: bool = False
 
 
 class TodayEvent(BaseModel):

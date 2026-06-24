@@ -29,7 +29,8 @@ async def prepared():
             await conn.execute(
                 text(
                     "UPDATE time_policy SET pause_computable_default=true, "
-                    "computation_period='monthly', ordinary_hours_per_period=160 WHERE id=1"
+                    "computation_period='monthly', ordinary_hours_per_period=160, "
+                    "desconexion_start=NULL, desconexion_end=NULL WHERE id=1"
                 )
             )
     except Exception as exc:  # noqa: BLE001 - cualquier fallo de conexión -> skip

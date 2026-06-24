@@ -8,7 +8,7 @@ mantenerse sincronizados a mano. Si cambias una columna aquí, añade una migrac
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy import (
     BigInteger,
@@ -19,6 +19,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Time,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -40,6 +41,11 @@ EVENT_TYPES = (
 MODALIDADES = ("presencial", "teletrabajo", "movil")
 SOURCES = ("web", "kiosk", "mobile", "offline_sync")
 
+# Tipo de relación laboral / ámbito de la obligación de registro (REQ-11). 'alta_direccion'
+# queda excluido del registro obligatorio; 'tiempo_parcial' genera complementarias (REQ-26);
+# 'ett'/'subcontrata' trasladan la obligación a la empresa usuaria/principal (usuaria_id).
+RELATION_TYPES = ("ordinaria", "alta_direccion", "tiempo_parcial", "ett", "subcontrata")
+
 # Ventanas de cómputo de la política de tiempo (REQ-12/REQ-13).
 COMPUTATION_PERIODS = ("daily", "weekly", "monthly")
 
@@ -53,6 +59,7 @@ ALERT_TYPES = (
     "account_locked",
     "mutation_attempt",
     "anomalous_access",
+    "off_hours",
 )
 ALERT_SEVERITIES = ("info", "warning", "critical")
 
@@ -76,6 +83,11 @@ class Worker(Base):
         CheckConstraint(
             "role IN ('empleado','supervisor','admin','rlt','inspeccion')",
             name="worker_role_check",
+        ),
+        CheckConstraint(
+            "relation_type IN "
+            "('ordinaria','alta_direccion','tiempo_parcial','ett','subcontrata')",
+            name="worker_relation_type_check",
         ),
     )
 
@@ -107,6 +119,16 @@ class Worker(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    # Ámbito de la obligación de registro (REQ-11) y consentimiento de geo (REQ-20).
+    relation_type: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'ordinaria'")
+    )
+    # Empresa usuaria/principal cuando la obligación no recae en nosotros (ETT/subcontrata).
+    usuaria_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    geo_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
 
 class TimeRecord(Base):
@@ -146,6 +168,8 @@ class TimeRecord(Base):
     )
     source: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'web'"))
     geo: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Clave de idempotencia del cliente para sync offline (REQ-22): mismo id -> no duplica.
+    client_event_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Desplazamientos (REQ-09). Polaridad: true = ese tramo computa como tiempo efectivo
     # (no se resta); false = no computa (se resta). Solo relevante en eventos travel_*.
     travel_computes: Mapped[bool] = mapped_column(
@@ -184,6 +208,10 @@ class TimePolicy(Base):
     ordinary_hours_per_period: Mapped[float] = mapped_column(
         Numeric, nullable=False, server_default=text("160")
     )
+    # Ventana de desconexión digital (REQ-26): fuera de [start, end) se genera alerta off_hours.
+    # NULL = sin control de desconexión configurado.
+    desconexion_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    desconexion_end: Mapped[time | None] = mapped_column(Time, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -234,7 +262,7 @@ class AuditAlert(Base):
     __table_args__ = (
         CheckConstraint(
             "alert_type IN ('chain_broken','login_failed','account_locked',"
-            "'mutation_attempt','anomalous_access')",
+            "'mutation_attempt','anomalous_access','off_hours')",
             name="audit_alert_type_check",
         ),
         CheckConstraint(

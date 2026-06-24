@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db, require_role
 from app.audit.chain import append_correction
+from app.core.crypto import encrypt_geo
 from app.db.models import EVENT_TYPES, MODALIDADES, RecordCorrection, TimeRecord
 from app.schemas.correction import CorrectionCreate, CorrectionResponse
 
@@ -61,11 +62,17 @@ async def create_correction(
 
     _validate_corrected_value(body.field, body.corrected_value)
 
+    # La geo es dato personal cifrado en reposo (REQ-20/23): al corregirla, se sella y almacena
+    # el CIPHERTEXT, nunca el texto plano (coherente con el cifrado del fichaje original).
+    corrected_value = body.corrected_value
+    if body.field == "geo":
+        corrected_value = encrypt_geo(corrected_value) or ""
+
     return await append_correction(
         db,
         original,
         field=body.field,
-        corrected_value=body.corrected_value,
+        corrected_value=corrected_value,
         reason=body.reason,
         author_id=uuid.UUID(claims["worker_id"]),
     )

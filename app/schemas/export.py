@@ -47,6 +47,7 @@ class ExportReport(BaseModel):
     efectivo_min: int
     ordinarias_min: int
     extra_min: int
+    complementarias_min: int
     ordinary_min: int
     generated_at: datetime
     records: list[ExportRecordRow]

@@ -73,7 +73,9 @@ async def load_report(
         )
     ).scalars().all()
 
-    summary = classify_overtime(records, policy, utc_now())
+    summary = classify_overtime(
+        records, policy, utc_now(), relation_type=worker.relation_type
+    )
     return build_report(worker, list(records), list(corrections), summary)
 
 

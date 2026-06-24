@@ -13,6 +13,7 @@ dependencies = [
     "bcrypt>=4.1",
     "pyjwt>=2.8",
     "fpdf2>=2.7",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

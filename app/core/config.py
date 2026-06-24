@@ -51,9 +51,25 @@ class Settings(BaseSettings):
     # Residencia de datos (REQ-23)
     deploy_region: str = "eu-west-1"
     supabase_region: str = "eu-central-1"
+    # Cifrado en reposo + transporte (REQ-20/23). En producción la conexión a Postgres usa
+    # TLS (sslmode=require) y la clave de cifrado se inyecta por entorno (el default es solo dev).
+    db_require_tls: bool = True
+    geo_encryption_key: str = "dev-only-geo-key-change-me"
+
+    # Ventana de tolerancia para fichajes offline sincronizados a posteriori (REQ-22):
+    # un evento offline conserva su hora real, pero se rechaza si es futuro o demasiado viejo.
+    max_offline_age_hours: int = 72
 
 
 settings = Settings()
+
+
+def db_uses_tls(s: Settings = settings) -> bool:
+    """True si la URL de BD fuerza TLS (sslmode/ssl=require) o no se exige TLS (dev)."""
+    if not s.db_require_tls:
+        return True
+    url = s.database_url.lower()
+    return "sslmode=require" in url or "ssl=require" in url or "ssl=true" in url
 
 
 def assert_eu_region(s: Settings = settings) -> None:

@@ -25,6 +25,10 @@ class _Rec:
     travel_computes: bool
     prev_hash: str
     hash: str
+    # Campos añadidos en Fase 6 (REQ-20/22): por defecto None → payload sin cambios
+    # (backward-compat: las cadenas previas siguen verificándose igual).
+    geo: str | None = None
+    client_event_id: str | None = None
 
 
 def _chain(wid: uuid.UUID) -> list[_Rec]:

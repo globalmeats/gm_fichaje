@@ -28,16 +28,27 @@ def compute_record_hash(
     modalidad: str,
     source: str,
     travel_computes: bool,
+    geo: str | None = None,
+    client_event_id: str | None = None,
 ) -> str:
     """Hash encadenado del registro: sha256(prev_hash || payload canónico).
 
     El payload incluye los campos sellables en un orden fijo; cualquier alteración
     posterior rompe este hash y, en cascada, el de todos los registros siguientes.
+
+    `geo` (el CIPHERTEXT almacenado; Fernet es autenticado → manipularlo rompe el hash) y
+    `client_event_id` (REQ-20/22) se añaden CONDICIONALMENTE solo cuando no son None, con
+    sufijos `|geo=…`/`|cid=…`. Así los registros previos (ambos NULL) recomputan exactamente
+    el mismo payload de antes y la cadena histórica sigue verde (backward-compat).
     """
     payload = (
         f"{worker_id}|{iso8601(occurred_at)}|{event_type}|"
         f"{modalidad}|{source}|{int(travel_computes)}"
     )
+    if geo is not None:
+        payload += f"|geo={geo}"
+    if client_event_id is not None:
+        payload += f"|cid={client_event_id}"
     return chain_hash(prev_hash, payload)
 
 
@@ -49,18 +60,38 @@ async def append_event(
     modalidad: str = "presencial",
     source: str = "web",
     travel_computes: bool = True,
+    geo: str | None = None,
+    client_event_id: str | None = None,
+    occurred_at: datetime | None = None,
 ) -> TimeRecord:
     """Inserta un evento sellado y encadenado para `worker_id` y hace commit.
 
     Serializa la cadena por trabajador con un advisory lock de transacción para que dos
     inserciones concurrentes no lean el mismo `prev_hash`.
+
+    `geo` debe llegar YA CIFRADO (ciphertext Fernet) por la capa de API: aquí se sella tal
+    cual y se almacena cifrado (REQ-20/23), nunca en claro. `occurred_at` se acepta SOLO para
+    la sincronización offline (REQ-22): si se pasa, se sella con esa hora REAL del cliente; si
+    es None se usa la hora del servidor (REQ-15, caso normal). `client_event_id` es la clave
+    de idempotencia: si ya existe un registro con ese id se DEVUELVE el existente (sin duplicar
+    ni romper la cadena), de modo que un reintento de la cola de sincronización es inocuo.
     """
     # 1) Serializa por trabajador hasta el fin de la transacción (commit/rollback).
     await db.execute(
         text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": str(worker_id)}
     )
 
-    # 2) Último eslabón del trabajador -> prev_hash / seq.
+    # 2) Idempotencia (REQ-22): si el evento ya se sincronizó, devolverlo sin duplicar.
+    if client_event_id is not None:
+        existing = (
+            await db.execute(
+                select(TimeRecord).where(TimeRecord.client_event_id == client_event_id)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
+    # 3) Último eslabón del trabajador -> prev_hash / seq.
     last = (
         await db.execute(
             select(TimeRecord.seq, TimeRecord.hash)
@@ -74,10 +105,19 @@ async def append_event(
     else:
         prev_hash, seq = last.hash, last.seq + 1
 
-    # 3) Sella con la hora del servidor y calcula el hash.
-    occurred_at = utc_now()
+    # 4) Sella: hora real del cliente (offline) o del servidor; calcula el hash.
+    if occurred_at is None:
+        occurred_at = utc_now()
     record_hash = compute_record_hash(
-        prev_hash, worker_id, occurred_at, event_type, modalidad, source, travel_computes
+        prev_hash,
+        worker_id,
+        occurred_at,
+        event_type,
+        modalidad,
+        source,
+        travel_computes,
+        geo,
+        client_event_id,
     )
 
     record = TimeRecord(
@@ -88,6 +128,8 @@ async def append_event(
         modalidad=modalidad,
         source=source,
         travel_computes=travel_computes,
+        geo=geo,
+        client_event_id=client_event_id,
         prev_hash=prev_hash,
         hash=record_hash,
     )
@@ -116,6 +158,8 @@ def verify_records(records) -> tuple[bool, int | None]:
             record.modalidad,
             record.source,
             record.travel_computes,
+            record.geo,
+            record.client_event_id,
         )
         if record.hash != expected:
             return False, record.seq
