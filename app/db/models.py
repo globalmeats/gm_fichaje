@@ -10,12 +10,25 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Roles válidos (ver skill rgpd-dataguard, REQ-24).
 WORKER_ROLES = ("empleado", "supervisor", "admin", "rlt", "inspeccion")
+
+# Tipos de evento de jornada (ver skill fichaje-domain). En Fase 1 solo se emiten
+# check_in/check_out; el resto queda definido en el esquema para no re-migrar (Fase 2).
+EVENT_TYPES = (
+    "check_in",
+    "check_out",
+    "break_start",
+    "break_end",
+    "travel_start",
+    "travel_end",
+)
+MODALIDADES = ("presencial", "teletrabajo", "movil")
+SOURCES = ("web", "kiosk", "mobile", "offline_sync")
 
 
 class Base(DeclarativeBase):
@@ -65,3 +78,50 @@ class Worker(Base):
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class TimeRecord(Base):
+    """Evento de jornada append-only (REQ-01). NUNCA se actualiza ni se borra (REQ-02):
+    el bloqueo lo garantiza el trigger `no_mutate_time_record` en la migración 0003.
+
+    El sellado (REQ-15) lo calcula SIEMPRE `app/audit/chain.py` (servicio único de
+    escritura); ningún endpoint inserta aquí directamente.
+    """
+
+    __tablename__ = "time_record"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('check_in','check_out','break_start','break_end',"
+            "'travel_start','travel_end')",
+            name="time_record_event_type_check",
+        ),
+        CheckConstraint(
+            "modalidad IN ('presencial','teletrabajo','movil')",
+            name="time_record_modalidad_check",
+        ),
+        CheckConstraint(
+            "source IN ('web','kiosk','mobile','offline_sync')",
+            name="time_record_source_check",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    worker_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    modalidad: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'presencial'")
+    )
+    source: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'web'"))
+    geo: Mapped[str | None] = mapped_column(String, nullable=True)
+    puesta_a_disposicion: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    prev_hash: Mapped[str] = mapped_column(String, nullable=False)
+    hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
