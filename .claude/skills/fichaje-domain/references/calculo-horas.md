@@ -8,7 +8,8 @@ def horas_periodo(worker_id, periodo, policy):
     for j in jornadas:
         bruto = j.check_out - j.check_in
         pausas_comp = sum(p.dur for p in j.pausas if p.computable)
-        traslado_no_efect = sum(t.dur for t in j.desplaz if t.puesta_a_disposicion)
+        # travel_computes=false -> ese desplazamiento NO computa -> se resta.
+        traslado_no_efect = sum(t.dur for t in j.desplaz if not t.travel_computes)
         efectivo_total += bruto - pausas_comp - traslado_no_efect
 
     ordinaria = policy.ordinary_hours_per_period

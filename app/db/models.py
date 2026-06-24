@@ -10,7 +10,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, String, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -29,6 +39,9 @@ EVENT_TYPES = (
 )
 MODALIDADES = ("presencial", "teletrabajo", "movil")
 SOURCES = ("web", "kiosk", "mobile", "offline_sync")
+
+# Ventanas de cómputo de la política de tiempo (REQ-12/REQ-13).
+COMPUTATION_PERIODS = ("daily", "weekly", "monthly")
 
 
 class Base(DeclarativeBase):
@@ -117,11 +130,44 @@ class TimeRecord(Base):
     )
     source: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'web'"))
     geo: Mapped[str | None] = mapped_column(String, nullable=True)
-    puesta_a_disposicion: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+    # Desplazamientos (REQ-09). Polaridad: true = ese tramo computa como tiempo efectivo
+    # (no se resta); false = no computa (se resta). Solo relevante en eventos travel_*.
+    travel_computes: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
     )
     prev_hash: Mapped[str] = mapped_column(String, nullable=False)
     hash: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class TimePolicy(Base):
+    """Política de cómputo de tiempo, ajustable en runtime (REQ-13, REQ-12).
+
+    Config MUTABLE (no append-only): singleton global `id = 1`. La inmutabilidad solo
+    aplica a `time_record`. Editable vía `PUT /admin/time-policy` sin tocar código.
+    """
+
+    __tablename__ = "time_policy"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="time_policy_singleton_check"),
+        CheckConstraint(
+            "computation_period IN ('daily','weekly','monthly')",
+            name="time_policy_period_check",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    pause_computable_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    computation_period: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'monthly'")
+    )
+    ordinary_hours_per_period: Mapped[float] = mapped_column(
+        Numeric, nullable=False, server_default=text("160")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

@@ -24,6 +24,14 @@ async def prepared():
         await migrate.run()
         async with engine.begin() as conn:
             await conn.execute(text("TRUNCATE worker RESTART IDENTITY CASCADE"))
+            # time_policy es un singleton de config (no se trunca): se reinicia a los
+            # valores por defecto para que cada test parta de un estado conocido.
+            await conn.execute(
+                text(
+                    "UPDATE time_policy SET pause_computable_default=true, "
+                    "computation_period='monthly', ordinary_hours_per_period=160 WHERE id=1"
+                )
+            )
     except Exception as exc:  # noqa: BLE001 - cualquier fallo de conexión -> skip
         pytest.skip(f"Base de datos no disponible para tests de integración: {exc}")
     yield

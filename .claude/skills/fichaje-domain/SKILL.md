@@ -34,7 +34,8 @@ Un evento atómico de fichaje. NUNCA se modifica ni borra.
 - `id`, `worker_id`, `event_type`, `occurred_at` (UTC, sellado por servidor),
   `modalidad`, `source` (`web|kiosk|mobile|offline_sync`),
   `geo` (nullable, cifrado, solo si consentimiento — REQ-20),
-  `puesta_a_disposicion` (bool, para desplazamientos — REQ-09),
+  `travel_computes` (bool, para desplazamientos — REQ-09; `true` = ese tramo computa
+  como tiempo efectivo, `false` = no computa),
   `hash`, `prev_hash`, `created_at`.
 
 ### `event_type` (enum)
@@ -75,7 +76,7 @@ Corrección de un registro sin tocar el original.
 ```
 tiempo_bruto      = check_out − check_in
 pausas_computables= Σ (break_end − break_start) marcadas como computables
-desplaz_no_efect  = Σ intervalos travel con puesta_a_disposicion = true
+desplaz_no_efect  = Σ intervalos travel con travel_computes = false
 tiempo_efectivo   = tiempo_bruto − pausas_computables − desplaz_no_efect
 ```
 - Pausa **no computable** (descanso retribuido) NO se resta.
@@ -97,9 +98,14 @@ tiempo_efectivo   = tiempo_bruto − pausas_computables − desplaz_no_efect
 
 ## Desplazamientos (REQ-09)
 
-- `travel_start`/`travel_end` con `puesta_a_disposicion` para separar tiempo efectivo
-  del mero traslado. Lo no efectivo se registra (trazabilidad) pero no computa como
-  trabajo; puede compensarse vía dietas (fuera del alcance del registro de jornada).
+- `travel_start`/`travel_end` con el flag `travel_computes` para separar el tiempo efectivo
+  del mero traslado. `travel_computes=false` → ese tramo se registra (trazabilidad) pero no
+  computa como trabajo; puede compensarse vía dietas (fuera del alcance del registro de
+  jornada). `travel_computes=true` → computa como tiempo efectivo.
+- **Nota terminológica:** evitamos el nombre `puesta_a_disposicion`. En el ET, el tiempo de
+  *puesta a disposición* del empresario ES tiempo de trabajo efectivo, justo lo contrario de
+  lo que marcaba aquel campo. `travel_computes` expresa la semántica sin usar el término
+  legal al revés.
 
 ## Modalidades (REQ-06)
 

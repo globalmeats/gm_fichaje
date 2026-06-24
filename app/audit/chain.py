@@ -27,7 +27,7 @@ def compute_record_hash(
     event_type: str,
     modalidad: str,
     source: str,
-    puesta_a_disposicion: bool,
+    travel_computes: bool,
 ) -> str:
     """Hash encadenado del registro: sha256(prev_hash || payload canónico).
 
@@ -36,7 +36,7 @@ def compute_record_hash(
     """
     payload = (
         f"{worker_id}|{iso8601(occurred_at)}|{event_type}|"
-        f"{modalidad}|{source}|{int(puesta_a_disposicion)}"
+        f"{modalidad}|{source}|{int(travel_computes)}"
     )
     return chain_hash(prev_hash, payload)
 
@@ -48,7 +48,7 @@ async def append_event(
     *,
     modalidad: str = "presencial",
     source: str = "web",
-    puesta_a_disposicion: bool = False,
+    travel_computes: bool = True,
 ) -> TimeRecord:
     """Inserta un evento sellado y encadenado para `worker_id` y hace commit.
 
@@ -77,7 +77,7 @@ async def append_event(
     # 3) Sella con la hora del servidor y calcula el hash.
     occurred_at = utc_now()
     record_hash = compute_record_hash(
-        prev_hash, worker_id, occurred_at, event_type, modalidad, source, puesta_a_disposicion
+        prev_hash, worker_id, occurred_at, event_type, modalidad, source, travel_computes
     )
 
     record = TimeRecord(
@@ -87,7 +87,7 @@ async def append_event(
         occurred_at=occurred_at,
         modalidad=modalidad,
         source=source,
-        puesta_a_disposicion=puesta_a_disposicion,
+        travel_computes=travel_computes,
         prev_hash=prev_hash,
         hash=record_hash,
     )
@@ -123,7 +123,7 @@ async def verify_chain(db: AsyncSession, worker_id: uuid.UUID) -> tuple[bool, in
             record.event_type,
             record.modalidad,
             record.source,
-            record.puesta_a_disposicion,
+            record.travel_computes,
         )
         if record.hash != expected:
             return False, record.seq
