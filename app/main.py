@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, auth, corrections, export, fichaje, portal, reports
 from app.api.export import OVERSIGHT_ROLES
-from app.core.config import assert_eu_region
+from app.core.config import assert_eu_region, assert_secure_secrets
 from app.web import STATIC_DIR, templates
 from app.web import router as web
 from app.web.session import WebForbidden, WebRedirect, web_claims
@@ -25,6 +25,8 @@ from app.web.session import WebForbidden, WebRedirect, web_claims
 async def lifespan(app: FastAPI):
     # REQ-23: no servir datos personales fuera de la UE.
     assert_eu_region()
+    # B1: no arrancar en prod/staging con secretos por defecto de desarrollo.
+    assert_secure_secrets()
     yield
 
 

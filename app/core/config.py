@@ -33,14 +33,28 @@ class RegionNotEUError(RuntimeError):
     """Se lanza cuando la región configurada no es de la UE (REQ-23)."""
 
 
+class InsecureDefaultSecretError(RuntimeError):
+    """Se lanza cuando un secreto crítico conserva su valor por defecto en prod (B1)."""
+
+
+# Valores por defecto SOLO para desarrollo. Son la única fuente de verdad: se usan como
+# `default=` de los campos y como referencia para detectarlos en producción.
+DEV_JWT_SECRET = "change-me-in-production"
+DEV_GEO_KEY = "dev-only-geo-key-change-me"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Entorno de ejecución: "local" = desarrollo (defaults permitidos); cualquier otro valor
+    # (production/staging) activa la guarda de secretos (B1).
+    app_env: str = "local"
 
     # Base de datos
     database_url: str = "postgresql+asyncpg://fichajes:localdev@localhost:5432/fichajes"
 
     # JWT
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = DEV_JWT_SECRET
     jwt_expires_min: int = 30
     jwt_algorithm: str = "HS256"
 
@@ -54,7 +68,7 @@ class Settings(BaseSettings):
     # Cifrado en reposo + transporte (REQ-20/23). En producción la conexión a Postgres usa
     # TLS (sslmode=require) y la clave de cifrado se inyecta por entorno (el default es solo dev).
     db_require_tls: bool = True
-    geo_encryption_key: str = "dev-only-geo-key-change-me"
+    geo_encryption_key: str = DEV_GEO_KEY
 
     # Ventana de tolerancia para fichajes offline sincronizados a posteriori (REQ-22):
     # un evento offline conserva su hora real, pero se rechaza si es futuro o demasiado viejo.
@@ -84,4 +98,27 @@ def assert_eu_region(s: Settings = settings) -> None:
             "Residencia de datos fuera de la UE (REQ-23). Regiones no válidas: "
             + ", ".join(offenders)
             + ". Los datos personales deben permanecer en servidores de la UE."
+        )
+
+
+def assert_secure_secrets(s: Settings = settings) -> None:
+    """Aborta el arranque si un secreto crítico sigue con su default de dev en prod (B1).
+
+    En `app_env == "local"` se permite arrancar con los defaults (desarrollo). En cualquier
+    otro entorno, un `jwt_secret` por defecto haría falsificables los tokens y una
+    `geo_encryption_key` por defecto dejaría la geo cifrada con una clave conocida.
+    """
+    if s.app_env == "local":
+        return
+    offenders = []
+    if s.jwt_secret == DEV_JWT_SECRET:
+        offenders.append("JWT_SECRET")
+    if s.geo_encryption_key == DEV_GEO_KEY:
+        offenders.append("GEO_ENCRYPTION_KEY")
+    if offenders:
+        raise InsecureDefaultSecretError(
+            f"Arranque abortado (APP_ENV={s.app_env!r}): estas variables conservan su "
+            "valor por defecto de desarrollo y deben configurarse con un secreto real: "
+            + ", ".join(offenders)
+            + "."
         )
