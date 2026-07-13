@@ -92,6 +92,37 @@ async def test_employee_cannot_export_other(client, db):
     assert r.status_code == 403
 
 
+async def test_export_includes_annual_and_absences(client, db):
+    from app.core.time import utc_now
+
+    admin = await create_employee(db, "Adm", "Anu", role="admin")
+    w = await create_employee(db, "Anu", "Al")
+    await _events_for(db, w.id)
+    year = utc_now().year
+    # Vacaciones de 5 días laborables (alta solo admin).
+    await client.post(
+        "/absences",
+        json={
+            "worker_id": w.id,
+            "absence_type": "vacaciones",
+            "start_date": f"{year}-07-06",
+            "end_date": f"{year}-07-10",
+        },
+        headers=_auth(create_access_token(admin.id, "admin", pin_temporary=False)),
+    )
+    h = _auth(create_access_token(w.id, "empleado", pin_temporary=False))
+
+    r = await client.get(f"/export/records.csv?start={year}-07-01&end={year}-07-31", headers=h)
+    assert r.status_code == 200, r.text
+    body = r.text
+    # Tope anual de jornada (REQ-27) y saldo de vacaciones (REQ-28) en el informe.
+    assert "anual_trabajado_min" in body
+    assert "vacaciones_disfrutadas" in body
+    # Sección de ausencias del periodo, sin binario del justificante.
+    assert "Ausencias del periodo" in body
+    assert "vacaciones" in body
+
+
 async def test_portal_my_records(client, db):
     w = await create_employee(db, "Mis", "Registros")
     await _events_for(db, w.id)

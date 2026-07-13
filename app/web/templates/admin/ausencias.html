@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Ausencias — Administración{% endblock %}
+{% block content %}
+<h1>Ausencias (vacaciones, bajas y permisos)</h1>
+<p class="muted">Alta y gestión solo admin/gestora. El trabajador consulta lo suyo en «Mis ausencias».</p>
+
+{% if message %}<p class="ok">{{ message }}</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<div class="card" x-data="{ tipo: 'vacaciones', porHoras: false }">
+  <h2>Registrar ausencia</h2>
+  <form method="post" action="/admin/ausencias">
+    <label for="worker_id">Trabajador</label>
+    <select id="worker_id" name="worker_id" required>
+      <option value="">— Selecciona —</option>
+      {% for w in workers %}
+        <option value="{{ w.id }}">{{ w.code }} · {{ w.first_name }} {{ w.last_name }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="absence_type">Tipo</label>
+    <select id="absence_type" name="absence_type" x-model="tipo">
+      {% for t in absence_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+
+    <div x-show="tipo === 'permiso'">
+      <label for="subtype">Subtipo de permiso</label>
+      <select id="subtype" name="subtype">
+        <option value="">— Selecciona —</option>
+        {% for s in permiso_subtypes %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <label for="start_date">Fecha inicio</label>
+    <input id="start_date" name="start_date" type="date" required>
+
+    <label for="end_date">Fecha fin</label>
+    <input id="end_date" name="end_date" type="date" required>
+
+    <label><input type="checkbox" x-model="porHoras" style="width:auto">
+      Ausencia por horas (p.ej. cita médica, un único día)</label>
+    <div x-show="porHoras" style="display:flex; gap:1rem; flex-wrap:wrap">
+      <div>
+        <label for="start_time">Hora inicio</label>
+        <input id="start_time" name="start_time" type="time" x-bind:disabled="!porHoras">
+      </div>
+      <div>
+        <label for="end_time">Hora fin</label>
+        <input id="end_time" name="end_time" type="time" x-bind:disabled="!porHoras">
+      </div>
+    </div>
+
+    <label for="note">Nota administrativa (NUNCA dato clínico/diagnóstico)</label>
+    <input id="note" name="note" maxlength="500">
+
+    <div style="margin-top:1rem"><button type="submit">Registrar ausencia</button></div>
+  </form>
+</div>
+
+<div class="card" style="border-color:#cc0; background:#fffae6">
+  <strong>Aviso de protección de datos.</strong> Sube <strong>solo el justificante de
+  asistencia</strong> (acredita que se acudió a la cita). <strong>Nunca</strong> subas partes,
+  informes o documentos con diagnóstico o causa clínica (minimización, art. 5.1.c RGPD). La baja
+  se registra solo con fechas y estado.
+</div>
+
+<div class="card">
+  <h2>Ausencias registradas</h2>
+  <form method="get" action="/admin/ausencias">
+    <label for="filtro">Filtrar por trabajador</label>
+    <select id="filtro" name="worker_id" onchange="this.form.submit()">
+      <option value="">— Todos —</option>
+      {% for w in workers %}
+        <option value="{{ w.id }}" {% if selected == w.id|string %}selected{% endif %}>
+          {{ w.code }} · {{ w.first_name }} {{ w.last_name }}
+        </option>
+      {% endfor %}
+    </select>
+  </form>
+
+  {% if rows %}
+    <table style="margin-top:1rem">
+      <thead>
+        <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
+          <th>Estado</th><th>Justif.</th><th>Acciones</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set a = row.a %}
+          <tr>
+            <td>{{ a.absence_type }}</td>
+            <td>{{ a.subtype or "—" }}</td>
+            <td>{{ a.start_date.strftime("%d/%m/%Y") }}{% if a.start_time %} {{ a.start_time.strftime("%H:%M") }}{% endif %}</td>
+            <td>{{ a.end_date.strftime("%d/%m/%Y") }}{% if a.end_time %} {{ a.end_time.strftime("%H:%M") }}{% endif %}</td>
+            <td>{% if row.hours is not none %}{{ "%.2f"|format(row.hours) }}{% else %}—{% endif %}</td>
+            <td>{{ a.status }}</td>
+            <td>{% if a.justified %}<span class="ok">sí</span>{% else %}no{% endif %}</td>
+            <td>
+              {% if row.doc_id %}
+                <a href="/descargar/justificante/{{ a.id }}/{{ row.doc_id }}">descargar</a>
+              {% endif %}
+              <form method="post" action="/admin/ausencias/{{ a.id }}/justificante"
+                    enctype="multipart/form-data" style="display:inline">
+                <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required
+                       style="width:auto; max-width:160px">
+                <button type="submit">Subir justif.</button>
+              </form>
+              {% if a.status != "cancelada" %}
+                <form method="post" action="/admin/ausencias/{{ a.id }}/cancelar"
+                      style="display:inline">
+                  <button type="submit" class="secondary">Cancelar</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted" style="margin-top:1rem">No hay ausencias registradas.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -36,6 +36,15 @@
     <label for="usuaria_id">Empresa usuaria (ETT/subcontrata, opcional)</label>
     <input id="usuaria_id" name="usuaria_id" placeholder="UUID o vacío">
 
+    <label for="weekly_hours">Jornada semanal pactada (horas, vacío = global)</label>
+    <input id="weekly_hours" name="weekly_hours" type="number" step="0.5" min="0">
+
+    <label for="annual_hours_cap">Tope anual de jornada (horas, vacío = global del convenio)</label>
+    <input id="annual_hours_cap" name="annual_hours_cap" type="number" step="1" min="0">
+
+    <label><input type="checkbox" name="flexible_schedule" value="true" style="width:auto">
+      Horario flexible (relevante para la subvención)</label>
+
     <label><input type="checkbox" name="geo_consent" value="true" style="width:auto">
       Consentimiento de geolocalización</label>
 

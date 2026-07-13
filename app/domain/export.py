@@ -18,7 +18,12 @@ from fpdf import FPDF
 
 from app.core.crypto import decrypt_geo
 from app.core.time import iso8601, to_madrid, utc_now
-from app.schemas.export import ExportCorrectionRow, ExportRecordRow, ExportReport
+from app.schemas.export import (
+    ExportAbsenceRow,
+    ExportCorrectionRow,
+    ExportRecordRow,
+    ExportReport,
+)
 
 
 class _Worker(Protocol):
@@ -32,8 +37,24 @@ def _minutes(td: timedelta) -> int:
     return int(td.total_seconds() // 60)
 
 
-def build_report(worker: _Worker, records: list, corrections: list, summary: dict) -> ExportReport:
-    """Ensambla el `ExportReport` (identificación + detalle + correcciones + totales)."""
+def build_report(
+    worker: _Worker,
+    records: list,
+    corrections: list,
+    summary: dict,
+    *,
+    annual: dict | None = None,
+    vacation: dict | None = None,
+    absences: list[ExportAbsenceRow] | None = None,
+    pausa_min: int = 0,
+    flexible_schedule: bool = False,
+) -> ExportReport:
+    """Ensambla el `ExportReport` (identificación + detalle + correcciones + totales).
+
+    `annual` (tope anual, REQ-27), `vacation` (saldo de vacaciones, REQ-28) y `absences`
+    (ausencias del periodo) son opcionales: si no se pasan, el informe sale con ceros/lista
+    vacía (compatibilidad hacia atrás).
+    """
     by_record: dict[object, list] = defaultdict(list)
     for c in corrections:
         by_record[c.original_record_id].append(c)
@@ -85,6 +106,15 @@ def build_report(worker: _Worker, records: list, corrections: list, summary: dic
         extra_min=_minutes(summary["extra"]),
         complementarias_min=_minutes(summary["complementarias"]),
         ordinary_min=_minutes(summary["ordinary"]),
+        pausa_min=pausa_min,
+        flexible_schedule=flexible_schedule,
+        annual_worked_min=_minutes(annual["worked"]) if annual else 0,
+        annual_cap_min=_minutes(annual["cap"]) if annual else 0,
+        annual_remaining_min=_minutes(annual["remaining"]) if annual else 0,
+        vacation_days_entitled=vacation["entitled"] if vacation else 0,
+        vacation_days_taken=vacation["taken"] if vacation else 0,
+        vacation_days_remaining=vacation["remaining"] if vacation else 0,
+        absences=absences or [],
         generated_at=utc_now(),
         records=rows,
     )
@@ -107,7 +137,31 @@ def to_csv(report: ExportReport) -> str:
     w.writerow(["extra_min", report.extra_min])
     w.writerow(["complementarias_min", report.complementarias_min])
     w.writerow(["ordinary_min", report.ordinary_min])
+    w.writerow(["pausa_min", report.pausa_min])
+    w.writerow(["horario_flexible", "si" if report.flexible_schedule else "no"])
+    w.writerow(["anual_trabajado_min", report.annual_worked_min])
+    w.writerow(["anual_tope_min", report.annual_cap_min])
+    w.writerow(["anual_restante_min", report.annual_remaining_min])
+    w.writerow(["vacaciones_derecho_dias", report.vacation_days_entitled])
+    w.writerow(["vacaciones_disfrutadas_dias", report.vacation_days_taken])
+    w.writerow(["vacaciones_restantes_dias", report.vacation_days_remaining])
     w.writerow(["generado", iso8601(report.generated_at)])
+    w.writerow([])
+
+    w.writerow(["# Ausencias del periodo (vacaciones/bajas/permisos)"])
+    w.writerow(
+        ["tipo", "subtipo", "inicio", "fin", "hora_inicio", "hora_fin",
+         "estado", "justificada", "horas", "tiene_justificante"]
+    )
+    for a in report.absences:
+        w.writerow(
+            [a.absence_type, a.subtype or "", a.start_date.isoformat(), a.end_date.isoformat(),
+             a.start_time.isoformat() if a.start_time else "",
+             a.end_time.isoformat() if a.end_time else "",
+             a.status, "si" if a.justified else "no",
+             a.hours if a.hours is not None else "",
+             "si" if a.has_document else "no"]
+        )
     w.writerow([])
 
     w.writerow(
@@ -165,11 +219,39 @@ def to_pdf(report: ExportReport) -> bytes:
             "Totales (min)",
             f"efectivo {report.efectivo_min} | ordinarias {report.ordinarias_min} | "
             f"extra {report.extra_min} | complementarias {report.complementarias_min} | "
-            f"jornada {report.ordinary_min}",
+            f"jornada {report.ordinary_min} | pausa {report.pausa_min}",
+        ),
+        ("Horario flexible", "si" if report.flexible_schedule else "no"),
+        (
+            "Tope anual (min)",
+            f"trabajado {report.annual_worked_min} | tope {report.annual_cap_min} | "
+            f"restante {report.annual_remaining_min}",
+        ),
+        (
+            "Vacaciones (dias)",
+            f"derecho {report.vacation_days_entitled} | "
+            f"disfrutadas {report.vacation_days_taken} | "
+            f"restantes {report.vacation_days_remaining}",
         ),
         ("Generado", iso8601(report.generated_at)),
     ]:
         pdf.cell(0, 6, _ascii(f"{label}: {value}"), new_x="LMARGIN", new_y="NEXT")
+
+    if report.absences:
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 6, _ascii("Ausencias del periodo"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Courier", "", 7)
+        for a in report.absences:
+            tramo = (
+                f" {a.start_time}-{a.end_time}" if a.start_time and a.end_time else ""
+            )
+            sub = f"/{a.subtype}" if a.subtype else ""
+            linea = (
+                f"{a.absence_type}{sub} {a.start_date}..{a.end_date}{tramo} "
+                f"[{a.status}] justificada={'si' if a.justified else 'no'}"
+            )
+            pdf.cell(0, 4, _ascii(linea), new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 9)

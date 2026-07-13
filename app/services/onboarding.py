@@ -40,6 +40,9 @@ async def create_employee(
     relation_type: str = "ordinaria",
     usuaria_id: uuid.UUID | None = None,
     geo_consent: bool = False,
+    weekly_hours: float | None = None,
+    annual_hours_cap: float | None = None,
+    flexible_schedule: bool = False,
 ) -> CreatedWorker:
     """Crea un trabajador. Reintenta con el siguiente código si la UNIQUE choca."""
     pin = generate_pin()
@@ -62,6 +65,9 @@ async def create_employee(
             relation_type=relation_type,
             usuaria_id=usuaria_id,
             geo_consent=geo_consent,
+            weekly_hours=weekly_hours,
+            annual_hours_cap=annual_hours_cap,
+            flexible_schedule=flexible_schedule,
         )
         db.add(worker)
         try:

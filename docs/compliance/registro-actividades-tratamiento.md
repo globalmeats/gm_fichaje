@@ -24,6 +24,20 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 | **Plazo de conservación** | **4 años** desde el registro (art. 34.9 ET). No se borran registros más recientes. Ciclo documentado en `retention_log`. |
 | **Ámbito (excepciones)** | Personal de **alta dirección** excluido del registro obligatorio (art. 2.1.a ET). En **ETT/subcontrata**, la obligación de registro recae en la empresa **usuaria/principal** (`worker.relation_type`, `usuaria_id`). |
 
+## 2.bis Actividad de tratamiento: "Ausencias y justificantes" (REQ-28)
+
+| Campo | Detalle |
+|---|---|
+| **Fines** | Gestionar vacaciones, bajas y permisos del trabajador y acreditar la justificación de la ausencia. |
+| **Base jurídica** | Ejecución del contrato y cumplimiento de obligaciones laborales — **art. 6.1.b y 6.1.c RGPD**. |
+| **Categorías de interesados** | Trabajadores por cuenta ajena de Global Meats. |
+| **Categorías de datos** | Tipo de ausencia, subtipo de permiso, fechas/horas, estado, nota administrativa (sin dato clínico) y **justificante de asistencia** (documento cifrado). La `baja` se registra solo con fechas/estado. |
+| **Categorías especiales** | No se tratan datos de salud: solo justificante de **asistencia**, nunca diagnósticos. Riesgo de inferencia por asociación mitigado con acceso mínimo. |
+| **Destinatarios** | Internos: administración/gestora (alta y gestión); el propio trabajador (consulta de lo suyo). Encargado: Supabase (BD, región UE). |
+| **Transferencias internacionales** | **Ninguna fuera de la UE/EEE.** |
+| **Plazo de conservación** | El necesario para acreditar la ausencia y sus efectos (retención del justificante por confirmar, ver `DEFERRED.md`). |
+| **Alta** | Solo administración/gestora (roles admin/supervisor); el trabajador no da de alta ausencias. |
+
 ## 3. Medidas técnicas y organizativas (art. 32 RGPD)
 
 - **Cifrado en reposo** de la geolocalización (Fernet, clave fuera de la BD).
@@ -33,7 +47,10 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
   anti-mutación + verificación de cadena; correcciones versionadas y selladas.
 - **Control de acceso**: roles, aislamiento por trabajador, RLS, autenticación por
   PIN bcrypt con lockout y alertas de auditoría.
-- **Minimización**: solo los datos imprescindibles; geo solo con consentimiento.
+- **Minimización**: solo los datos imprescindibles; geo solo con consentimiento; en ausencias,
+  solo justificante de **asistencia** (nunca diagnósticos) y la `baja` sin dato clínico.
+- **Cifrado del justificante**: el documento de ausencia se almacena cifrado (Fernet, clave
+  fuera de la BD), con acceso restringido por rol y al propio trabajador.
 - **Derecho a la desconexión digital**: alertas `off_hours` fuera de la ventana laboral.
 
 ## 4. Ejercicio de derechos

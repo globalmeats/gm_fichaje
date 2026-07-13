@@ -10,7 +10,10 @@
       <li><a href="/admin/politica">Política de tiempo</a></li>
     {% endif %}
     <li><a href="/admin/registros">Registros y correcciones</a></li>
-    <li><a href="/admin/horas">Horas extra</a></li>
+    <li><a href="/admin/horas">Horas extra y tope anual</a></li>
+    {% if claims.role in ("admin", "supervisor") %}
+      <li><a href="/admin/ausencias">Ausencias (vacaciones, bajas y permisos)</a></li>
+    {% endif %}
     <li><a href="/admin/export">Exportar registros</a></li>
     {% if claims.role in ("admin", "supervisor", "inspeccion") %}
       <li><a href="/admin/alertas">Alertas de auditoría</a></li>

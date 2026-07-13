@@ -44,3 +44,17 @@ def decrypt_geo(token: str | None) -> str | None:
         return _fernet().decrypt(token.encode("ascii")).decode("utf-8")
     except (InvalidToken, ValueError):
         return None
+
+
+def encrypt_blob(data: bytes) -> bytes:
+    """Cifra un binario (justificante de asistencia, REQ-28) con la misma clave Fernet.
+
+    El documento se guarda CIFRADO en `absence_document.content_encrypted`: un volcado del
+    Postgres no expone el adjunto, y la clave vive solo en el entorno.
+    """
+    return _fernet().encrypt(data)
+
+
+def decrypt_blob(token: bytes) -> bytes:
+    """Descifra un binario cifrado con `encrypt_blob`. Lanza si el token es inválido."""
+    return _fernet().decrypt(token)

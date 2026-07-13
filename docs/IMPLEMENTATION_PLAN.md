@@ -258,3 +258,83 @@ de usuario, no solo de API.
 - Cierre de la compensación de horas extra (abono/descanso, `DEFERRED.md` punto 2).
 - Alta inicial de la plantilla real e importación de datos históricos si los hubiera.
 - Validación legal del cómputo con laboralista (`DEFERRED.md` punto 1).
+
+# Fase 8 — Gestión de la gestora: jornada por trabajador, tope anual y ausencias
+
+## Contexto
+
+La gestora necesita configurar la jornada de cada trabajador (no solo la global), controlar el
+tope anual del convenio (1760 h) y registrar ausencias (vacaciones, bajas y permisos) con su
+justificante. Plan detallado en `docs/plan-fase8-gestora.md`.
+
+## Requisitos que toca
+
+- **REQ-27** (🟢) Tope anual de jornada del convenio (1760 h): cómputo anual + alerta `annual_cap`.
+- **REQ-28** (🟡) Registro de ausencias (vacaciones/bajas/permisos) con subtipo, por horas y
+  justificante de **asistencia** cifrado; alta solo admin/gestora; balance de vacaciones.
+- **REQ-29** (🟢) Jornada flexible por trabajador (relevante para la subvención): `weekly_hours` /
+  `flexible_schedule` por trabajador con fallback global + cómputo en periodo superior al diario.
+
+## Bloques
+
+1. **Jornada por trabajador + tope anual**: columnas `worker.weekly_hours/annual_hours_cap/
+   flexible_schedule` y `time_policy.annual_hours_cap=1760/annual_vacation_days=22`;
+   `app/domain/schedule.py` (resolución con fallback) y `annual_status` en `app/domain/hours.py`;
+   alerta `annual_cap`.
+2. **Ausencias + justificantes**: tablas `absence` y `absence_document` (cifrado); dominio
+   `app/domain/absences.py` (días, horas, balance, solapes); API `app/api/absences.py`
+   (alta solo admin/gestora, descarga self+supervisión).
+3. **Informes, UI y docs**: export/summary con tope anual + saldo de vacaciones + ausencias del
+   periodo; panel de ausencias y edición de jornada por trabajador; portal «Mis ausencias»;
+   actualización de SKILL/compliance_check/DPIA/RAT/DEFERRED.
+
+## Criterios de aceptación
+
+- La gestora da de alta una ausencia y sube el justificante de asistencia (cifrado); el
+  trabajador la ve y descarga la suya en «Mis ausencias» con su saldo de vacaciones.
+- Un empleado no puede dar de alta ausencias ni descargar el justificante de otro (403).
+- El export (CSV/PDF) incluye tope anual, saldo de vacaciones y ausencias del periodo, sin el
+  binario del justificante.
+- `ruff check .` limpio · `pytest -q` verde · `compliance_check.py` exit 0 (REQ-27/28/29 cubiertos).
+
+## Verificación
+
+1. `python -m app.db.migrate` (0011/0012/0013) · `ruff check .` · `pytest -q` · `compliance_check.py`.
+2. Recrear admin JaAz/194608 tras la suite (TRUNCATE worker).
+
+# Fase 9 — Go-live: artefactos de despliegue y observabilidad (código en repo)
+
+## Contexto
+
+La auditoría de preparación para producción detectó huecos de despliegue. Esta fase cubre los
+que **requieren código/config en el repo** (los de panel externo —backups de Supabase y branch
+protection de GitHub— quedan fuera, se gestionan en sus consolas). Objetivo: repo desplegable en
+Railway de forma reproducible y observable.
+
+## Qué entra
+
+- **Pinning de dependencias con uv**: `uv.lock` + `.python-version` (3.12); build reproducible.
+- **Dockerfile** (`python:3.12-slim` + `uv sync --frozen --no-dev`) y `.dockerignore`.
+- **railway.toml**: `builder=DOCKERFILE`, `healthcheckPath=/health`,
+  `preDeployCommand="python -m app.db.migrate"` (migraciones automáticas en cada deploy). El cron
+  se documenta como servicio aparte (`python -m app.jobs.nightly`, `0 3 * * *`).
+- **Job nocturno** `app/jobs/nightly.py`: retención 4 años (REQ-03) + verificación de cadena
+  (REQ-25) en una pasada, con resumen logueado.
+- **Logging estándar** `app/core/logging.py` (`setup_logging` idempotente a stdout) + middleware
+  HTTP de acceso (método, ruta, estado, duración; sin PII) + `log_level` en config (`LOG_LEVEL`).
+- **/health profundo**: comprueba la BD (`SELECT 1`) → 200 `{status:ok,db:ok}` o 503 degradado.
+- **CI a uv**: `astral-sh/setup-uv` + `uv sync --frozen --extra dev` + `uv run …`.
+
+## Criterios de aceptación
+
+- `uv sync --frozen` reproduce el entorno; `uv run ruff` limpio; `uv run pytest -q` verde.
+- `docker build` produce imagen que arranca uvicorn con `--proxy-headers`.
+- `python -m app.jobs.nightly` corre retención + verificación y loguea resumen.
+- `/health` devuelve el estado de la BD (200/503).
+
+## Fuera de alcance
+
+- Backups de Supabase y branch protection de GitHub (ajustes de panel, sin código).
+- Borrado físico de `time_record` (diferido; la retención solo marca elegibles).
+- Agregador de logs externo / APM (stdout basta para Railway).
+3. Commit por el usuario.

@@ -32,6 +32,12 @@
        x-show="wid"><button type="button">Descargar PDF</button></a>
   </p>
 
+  {% if claims.role == "admin" %}
+    <p style="margin-top:1rem" x-show="wid">
+      <a :href="'/admin/trabajador/' + wid"><button type="button">Editar jornada</button></a>
+    </p>
+  {% endif %}
+
   <form method="post" action="/admin/reset-pin" x-show="wid"
         onsubmit="return confirm('¿Restablecer el PIN de este trabajador?')">
     <input type="hidden" name="worker_id" :value="wid">

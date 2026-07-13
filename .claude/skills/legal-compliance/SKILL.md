@@ -61,6 +61,9 @@ de verdad LEGAL es la Guía oficial del Ministerio de Trabajo y el art. 34.9/35.
 | REQ-24 | Control de accesos por rol | 🟡 | Roles admin/supervisor/empleado/RLT/inspección | RLS + permisos por rol (skill `rgpd-dataguard`) |
 | REQ-25 | Alertas / auditoría | 🟡 | Detección de accesos/manipulación anómalos | Alertas automáticas registradas |
 | REQ-26 | Desglose horas + desconexión | 🟡 | Ordinarias/extra/complementarias; desconexión digital | Clasificación automática de horas |
+| REQ-27 | Tope anual de jornada (convenio) | 🟢 | Cómputo anual sobre 1760 h del convenio | Cómputo anual + alerta `annual_cap` |
+| REQ-28 | Registro de ausencias | 🟡 | Vacaciones/bajas/permisos + justificante de asistencia | Tabla `absence` + balance + documento cifrado (minimización art. 9/5.1.c) |
+| REQ-29 | Jornada flexible por trabajador | 🟢 | Jornada pactada por trabajador (subvención) | `weekly_hours`/`flexible_schedule` + cómputo > diario + informe |
 
 ## Referencias
 

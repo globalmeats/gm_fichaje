@@ -40,3 +40,10 @@ async def test_portal_tabla_fragment(client, db):
     r = await client.get("/mis-registros/tabla")
     assert r.status_code == 200
     assert 'id="registros"' in r.text
+
+
+async def test_nav_includes_mis_ausencias(client, db):
+    await _session(client, db)
+    r = await client.get("/mis-registros")
+    assert r.status_code == 200
+    assert "/mis-ausencias" in r.text

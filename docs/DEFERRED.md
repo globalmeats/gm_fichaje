@@ -19,3 +19,18 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   asegurar que el FK no bloquea el borrado ni deja el log huérfano (probablemente
   `ON DELETE SET NULL`); además es un punto RGPD (derecho de supresión vs deber de conservación
   4 años).
+- **Calendario laboral de festivos (Fase 8)** — `leave_days`/cómputo anual cuentan L–V sin
+  descontar festivos nacionales/autonómicos; falta un calendario laboral configurable.
+- **¿Vacaciones/permisos descuentan del tope anual de 1760 h? (Fase 8)** — hoy el tope se mide
+  solo sobre tiempo efectivo trabajado; confirmar con el convenio si las ausencias reducen el tope.
+- **¿Las ausencias justificadas computan como tiempo trabajado? (Fase 8)** — operativamente el
+  tiempo justificado no exige fichaje (no es anómalo), pero no se suma como trabajado; confirmar
+  con convenio.
+- **Flag de pausa computable por evento (Fase 8)** — distinguir comida vs otras pausas a nivel de
+  evento; toca el sellado de `time_record`, por eso se difiere (hoy es política global).
+- **Devengo/prorrateo de vacaciones por antigüedad y carryover entre años (Fase 8)** — hoy el
+  balance es derecho anual fijo (`annual_vacation_days`) menos lo disfrutado del año en curso.
+- **Catálogo de subtipos de permiso configurable por convenio (Fase 8)** — hoy `PERMISO_SUBTYPES`
+  es constante en código; debería poder editarse como config del convenio.
+- **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
+  justificantes subidos no se escanean ni tienen política de borrado documentada.

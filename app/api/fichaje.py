@@ -20,11 +20,19 @@ from app.audit.chain import append_event
 from app.core.config import settings
 from app.core.crypto import encrypt_geo
 from app.core.time import iso8601, utc_now
-from app.db.models import TimePolicy, TimeRecord, Worker
+from app.db.models import Absence, AuditAlert, TimePolicy, TimeRecord, Worker
+from app.domain.absences import vacation_balance, vacation_days_taken
 from app.domain.desconexion import is_off_hours
-from app.domain.hours import journey_effective, period_summary, reconstruct_journeys
+from app.domain.hours import (
+    annual_status,
+    journey_effective,
+    period_summary,
+    reconstruct_journeys,
+)
+from app.domain.schedule import effective_vacation_days
 from app.domain.state_machine import InvalidTransition, next_state, reconstruct_state
 from app.schemas.fichaje import (
+    AnnualSummary,
     FichajeEventRequest,
     FichajeEventResponse,
     JourneySummary,
@@ -34,6 +42,7 @@ from app.schemas.fichaje import (
     SyncEventResponse,
     TodayEvent,
     TodayResponse,
+    VacationSummary,
 )
 
 router = APIRouter(prefix="/fichaje", tags=["fichaje"])
@@ -62,6 +71,54 @@ async def _alert_if_off_hours(db: AsyncSession, worker_id: uuid.UUID, occurred_a
             worker_id=worker_id,
             severity="info",
         )
+
+
+async def _alert_if_annual_cap(db: AsyncSession, worker: Worker | None) -> None:
+    """Si el trabajador supera (o se acerca a) su tope anual, deja una alerta annual_cap (REQ-27).
+
+    No bloquea el fichaje (misma filosofía que off_hours). Deduplica: no repite la alerta si ya
+    hay una para ese trabajador dentro del año natural en curso.
+    """
+    if worker is None:
+        return
+    policy = await db.get(TimePolicy, 1)
+    if policy is None:
+        return
+    records = (
+        await db.execute(
+            select(TimeRecord)
+            .where(TimeRecord.worker_id == worker.id)
+            .order_by(TimeRecord.seq.asc())
+        )
+    ).scalars().all()
+    now = utc_now()
+    status_ = annual_status(list(records), worker, policy, now)
+    if not (status_["exceeded"] or status_["near"]):
+        return
+
+    # Deduplicación: ¿ya hay una alerta annual_cap de este trabajador este año?
+    existing = (
+        await db.execute(
+            select(AuditAlert.id).where(
+                AuditAlert.alert_type == "annual_cap",
+                AuditAlert.worker_id == worker.id,
+                AuditAlert.detected_at >= status_["start"],
+            )
+        )
+    ).first()
+    if existing is not None:
+        return
+
+    worked_h = status_["worked"].total_seconds() / 3600
+    kind = "superado" if status_["exceeded"] else "cercano al"
+    await record_alert(
+        db,
+        "annual_cap",
+        f"Tope anual de jornada {kind} límite ({worked_h:.1f}h de "
+        f"{status_['cap_hours']:.0f}h en {status_['year']}).",
+        worker_id=worker.id,
+        severity="warning",
+    )
 
 
 async def _ordered_event_types(db: AsyncSession, worker_id: uuid.UUID) -> list[str]:
@@ -111,6 +168,7 @@ async def create_event(
         geo=stored_geo,
     )
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
+    await _alert_if_annual_cap(db, worker)
     return FichajeEventResponse(
         id=str(record.id),
         seq=record.seq,
@@ -195,6 +253,7 @@ async def sync_event(
         occurred_at=occurred,
     )
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
+    await _alert_if_annual_cap(db, worker)
     return SyncEventResponse(
         id=str(record.id),
         seq=record.seq,
@@ -285,6 +344,16 @@ async def summary(
         )
 
     period = period_summary(records, policy, now)
+
+    # Estado anual del tope de jornada (REQ-27) y saldo de vacaciones (REQ-18/28) propios.
+    worker = await db.get(Worker, worker_id)
+    annual = annual_status(list(records), worker, policy, now)
+    absences = (
+        await db.execute(select(Absence).where(Absence.worker_id == worker_id))
+    ).scalars().all()
+    taken = vacation_days_taken(list(absences), now.year)
+    bal = vacation_balance(effective_vacation_days(worker, policy), taken)
+
     return SummaryResponse(
         today=today_journeys,
         period=PeriodSummary(
@@ -292,5 +361,19 @@ async def summary(
             start=period["start"],
             end=period["end"],
             efectivo_min=_minutes(period["efectivo"]),
+        ),
+        annual=AnnualSummary(
+            year=annual["year"],
+            worked_min=_minutes(annual["worked"]),
+            cap_min=_minutes(annual["cap"]),
+            remaining_min=_minutes(annual["remaining"]),
+            exceeded=annual["exceeded"],
+            near=annual["near"],
+        ),
+        vacation=VacationSummary(
+            year=now.year,
+            entitled=bal["entitled"],
+            taken=bal["taken"],
+            remaining=bal["remaining"],
         ),
     )

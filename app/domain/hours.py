@@ -20,6 +20,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from app.domain.schedule import effective_annual_cap
+
+# Umbral de aviso del tope anual: a partir de este ratio de consumo se considera "cerca".
+ANNUAL_WARNING_RATIO = 0.9
+
 
 class _Record(Protocol):
     """Mínimo que necesita un `time_record` para reconstruir jornadas (duck typing)."""
@@ -148,6 +153,51 @@ def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> di
     return {
         "efectivo": total,
         "period": policy.computation_period,
+        "start": start,
+        "end": end,
+    }
+
+
+def annual_window(now: datetime) -> tuple[datetime, datetime]:
+    """Ventana [1 ene, 1 ene del año siguiente) en UTC para el cómputo anual (REQ-27)."""
+    now = now.astimezone(UTC)
+    start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = start.replace(year=start.year + 1)
+    return start, end
+
+
+def annual_worked(records: list[_Record], policy: _Policy, now: datetime) -> timedelta:
+    """Suma el tiempo efectivo de las jornadas cerradas dentro del año natural en curso."""
+    start, end = annual_window(now)
+    total = timedelta(0)
+    for j in reconstruct_journeys(records):
+        if j.check_out is not None and start <= j.check_in < end:
+            total += journey_effective(j, policy)
+    return total
+
+
+def annual_status(records: list[_Record], worker, policy: _Policy, now: datetime) -> dict:
+    """Estado del tope anual del trabajador (REQ-27): trabajado, tope, restante y flags.
+
+    `cap` es el tope efectivo del trabajador (su `annual_hours_cap` o el default global del
+    convenio). `exceeded` marca que se ha superado el tope; `near` que se ha alcanzado el
+    umbral de aviso (`ANNUAL_WARNING_RATIO`). El cómputo es sobre horas EFECTIVAS trabajadas.
+    """
+    worked = annual_worked(records, policy, now)
+    cap_hours = effective_annual_cap(worker, policy)
+    cap = timedelta(hours=cap_hours)
+    remaining = cap - worked
+    ratio = (worked / cap) if cap.total_seconds() > 0 else 0.0
+    start, end = annual_window(now)
+    return {
+        "worked": worked,
+        "cap": cap,
+        "cap_hours": cap_hours,
+        "remaining": remaining,
+        "ratio": ratio,
+        "exceeded": worked > cap,
+        "near": ratio >= ANNUAL_WARNING_RATIO,
+        "year": start.year,
         "start": start,
         "end": end,
     }

@@ -19,7 +19,12 @@ from app.core.time import utc_now
 from app.db.models import AuditAlert, TimePolicy, Worker
 from app.schemas.audit import AuditAlertResponse, ChainVerifyResponse
 from app.schemas.policy import TimePolicyResponse, TimePolicyUpdate
-from app.schemas.worker import WorkerCreate, WorkerCreatedResponse
+from app.schemas.worker import (
+    WorkerCreate,
+    WorkerCreatedResponse,
+    WorkerScheduleResponse,
+    WorkerUpdate,
+)
 from app.services.onboarding import create_employee
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -44,6 +49,9 @@ async def admin_create_worker(
         relation_type=body.relation_type,
         usuaria_id=body.usuaria_id,
         geo_consent=body.geo_consent,
+        weekly_hours=body.weekly_hours,
+        annual_hours_cap=body.annual_hours_cap,
+        flexible_schedule=body.flexible_schedule,
     )
     return WorkerCreatedResponse(
         id=created.id,
@@ -78,6 +86,24 @@ async def admin_reset_pin(
         pin=new_pin,
         pin_temporary=True,
     )
+
+
+@router.patch("/workers/{worker_id}", response_model=WorkerScheduleResponse)
+async def admin_update_worker(
+    worker_id: uuid.UUID,
+    body: WorkerUpdate,
+    claims: dict = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> Worker:
+    """Edita la jornada de un trabajador (REQ-27/29). Solo admin; campos presentes se aplican."""
+    worker = await db.get(Worker, worker_id)
+    if worker is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador no existe.")
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(worker, key, value)
+    await db.commit()
+    await db.refresh(worker)
+    return worker
 
 
 @router.get("/time-policy", response_model=TimePolicyResponse)

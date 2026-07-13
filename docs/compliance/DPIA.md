@@ -97,6 +97,25 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
 | Fuga por transferencia fuera de UE | Verificación de región UE en arranque y deploy |
 | Interceptación en tránsito | TLS obligatorio a la BD |
 | Fuerza bruta sobre PIN | Hash bcrypt + lockout + alertas |
+| Exposición de datos de salud por el justificante | Solo justificante de **asistencia** (no diagnósticos); cifrado en reposo; acceso mínimo por rol |
+| Inferencia de salud por asociación (acudir a centro médico) | Minimización; la `baja` se registra solo con fechas/estado; acceso restringido a self + supervisión |
+
+## 8.bis Tratamiento de ausencias y justificantes (REQ-28)
+
+El alta de ausencias (vacaciones, bajas y permisos) la realiza solo administración/gestora.
+Medidas y límites específicos:
+
+1. **Solo justificantes de asistencia.** Se admite únicamente el documento que acredita
+   *que se acudió* a la cita (justificante de asistencia). **Nunca** partes, informes ni
+   documentos con diagnóstico o causa clínica (minimización, art. 5.1.c RGPD).
+2. **Documento cifrado.** El justificante se almacena **cifrado** (Fernet, clave fuera de la BD)
+   en servidores de la UE, con acceso restringido por rol y al propio trabajador.
+3. **La `baja` se registra solo con fechas y estado**, sin dato clínico alguno.
+4. **Base jurídica y conservación.** Obligación legal/relación contractual (art. 6.1.b/c RGPD);
+   el justificante se conserva el tiempo necesario para acreditar la ausencia (retención por
+   confirmar, ver `DEFERRED.md`).
+5. **Sensibilidad por asociación.** "Asistir a un centro médico" puede ser información sensible
+   por asociación; por eso el acceso es el **mínimo necesario** (self + roles de supervisión).
 
 ## 9. Conclusión
 

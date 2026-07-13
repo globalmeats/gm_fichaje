@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Mis ausencias — Fichajes Global Meats{% endblock %}
+{% block content %}
+<h1>Mis ausencias</h1>
+<p class="muted">Consulta tus vacaciones, bajas y permisos. El alta la gestiona administración.</p>
+
+<div class="card">
+  <h2>Saldo de vacaciones {{ balance.year }}</h2>
+  <table>
+    <tbody>
+      <tr><th>Días anuales</th><td>{{ "%.1f"|format(balance.entitled) }}</td></tr>
+      <tr><th>Disfrutados</th><td>{{ balance.taken }}</td></tr>
+      <tr><th>Restantes</th><td><strong>{{ "%.1f"|format(balance.remaining) }}</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Tope anual de jornada {{ annual.year }}</h2>
+  {% if annual.flexible %}
+    <p class="muted">Horario flexible: el cómputo se reparte en el periodo pactado.</p>
+  {% endif %}
+  <table>
+    <tbody>
+      <tr><th>Trabajado</th><td>{{ annual.worked_min // 60 }}h {{ annual.worked_min % 60 }}m</td></tr>
+      <tr><th>Tope</th><td>{{ annual.cap_min // 60 }}h {{ annual.cap_min % 60 }}m</td></tr>
+      <tr><th>Restante</th>
+        <td class="{% if annual.exceeded %}error{% elif annual.near %}muted{% endif %}">
+          {{ annual.remaining_min // 60 }}h {{ annual.remaining_min % 60 }}m
+          {% if annual.exceeded %}(tope superado){% elif annual.near %}(cerca del tope){% endif %}
+        </td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Mis ausencias registradas</h2>
+  {% if rows %}
+    <table>
+      <thead>
+        <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
+          <th>Estado</th><th>Justif.</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set a = row.a %}
+          <tr>
+            <td>{{ a.absence_type }}</td>
+            <td>{{ a.subtype or "—" }}</td>
+            <td>{{ a.start_date.strftime("%d/%m/%Y") }}{% if a.start_time %} {{ a.start_time.strftime("%H:%M") }}{% endif %}</td>
+            <td>{{ a.end_date.strftime("%d/%m/%Y") }}{% if a.end_time %} {{ a.end_time.strftime("%H:%M") }}{% endif %}</td>
+            <td>{% if row.hours is not none %}{{ "%.2f"|format(row.hours) }}{% else %}—{% endif %}</td>
+            <td>{{ a.status }}</td>
+            <td>
+              {% if row.doc_id %}
+                <a href="/descargar/justificante/{{ a.id }}/{{ row.doc_id }}">descargar</a>
+              {% elif a.justified %}<span class="ok">sí</span>{% else %}no{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No tienes ausencias registradas.</p>
+  {% endif %}
+</div>
+{% endblock %}

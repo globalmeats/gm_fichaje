@@ -39,6 +39,23 @@
       </tbody>
     </table>
   </div>
+  {% if annual %}
+    <div class="card">
+      <h2>Tope anual de jornada {{ annual.year }} (REQ-27)</h2>
+      {% if annual.flexible %}<p class="muted">Horario flexible.</p>{% endif %}
+      <table>
+        <tbody>
+          <tr><th>Trabajado en el año</th><td>{{ annual.worked_min // 60 }}h {{ annual.worked_min % 60 }}m</td></tr>
+          <tr><th>Tope anual</th><td>{{ annual.cap_min // 60 }}h {{ annual.cap_min % 60 }}m</td></tr>
+          <tr><th>Restante</th>
+            <td class="{% if annual.exceeded %}error{% elif annual.near %}muted{% endif %}">
+              {{ annual.remaining_min // 60 }}h {{ annual.remaining_min % 60 }}m
+              {% if annual.exceeded %}(tope superado){% elif annual.near %}(cerca del tope){% endif %}
+            </td></tr>
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
 {% elif selected %}
   <p class="muted">No se pudo calcular (trabajador o política no disponibles).</p>
 {% endif %}

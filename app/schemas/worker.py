@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models import RELATION_TYPES, WORKER_ROLES
 
@@ -19,6 +19,10 @@ class WorkerCreate(BaseModel):
     relation_type: str = Field(default="ordinaria")
     usuaria_id: uuid.UUID | None = None
     geo_consent: bool = False
+    # Jornada por trabajador (REQ-27/29). NULL → usa el default global de time_policy.
+    weekly_hours: float | None = Field(default=None, gt=0)
+    annual_hours_cap: float | None = Field(default=None, gt=0)
+    flexible_schedule: bool = False
 
     @field_validator("role")
     @classmethod
@@ -33,6 +37,32 @@ class WorkerCreate(BaseModel):
         if v not in RELATION_TYPES:
             raise ValueError(f"relation_type debe ser uno de {RELATION_TYPES}")
         return v
+
+
+class WorkerUpdate(BaseModel):
+    """Edición de la jornada de un trabajador existente. Solo campos presentes se aplican."""
+
+    weekly_hours: float | None = Field(default=None, gt=0)
+    annual_hours_cap: float | None = Field(default=None, gt=0)
+    flexible_schedule: bool | None = None
+    geo_consent: bool | None = None
+
+
+class WorkerScheduleResponse(BaseModel):
+    """Jornada vigente de un trabajador (tras alta o edición)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    employee_code: str = Field(..., validation_alias="code")
+    first_name: str
+    last_name: str
+    role: str
+    relation_type: str
+    weekly_hours: float | None
+    annual_hours_cap: float | None
+    flexible_schedule: bool
+    geo_consent: bool
 
 
 class WorkerCreatedResponse(BaseModel):

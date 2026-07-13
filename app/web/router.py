@@ -15,11 +15,12 @@ from datetime import date as date_cls
 from datetime import time as time_cls
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.absences import vacation_balance_for
 from app.api.auth import authenticate, change_worker_pin
 from app.api.corrections import apply_correction
 from app.api.deps import get_db
@@ -27,27 +28,41 @@ from app.api.export import OVERSIGHT_ROLES, load_report
 from app.api.fichaje import _alert_if_off_hours, _ordered_event_types
 from app.audit.chain import append_event
 from app.audit.verify import verify_all
+from app.core.crypto import decrypt_blob, encrypt_blob
 from app.core.security import create_access_token, generate_pin, hash_pin
 from app.core.time import utc_now
 from app.db.models import (
+    ABSENCE_TYPES,
     COMPUTATION_PERIODS,
     EVENT_TYPES,
+    JUSTIFICANTE_CONTENT_TYPES,
+    MAX_JUSTIFICANTE_BYTES,
     MODALIDADES,
+    PERMISO_SUBTYPES,
     RELATION_TYPES,
     WORKER_ROLES,
+    Absence,
+    AbsenceDocument,
     AuditAlert,
     TimePolicy,
     TimeRecord,
     Worker,
 )
+from app.domain.absences import absence_hours, overlaps
 from app.domain.export import to_csv, to_pdf
-from app.domain.hours import classify_overtime, journey_effective, reconstruct_journeys
+from app.domain.hours import (
+    annual_status,
+    classify_overtime,
+    journey_effective,
+    reconstruct_journeys,
+)
 from app.domain.state_machine import (
     InvalidTransition,
     State,
     next_state,
     reconstruct_state,
 )
+from app.schemas.absence import AbsenceCreate
 from app.services.onboarding import create_employee
 from app.web import templates
 from app.web.session import (
@@ -416,6 +431,9 @@ async def admin_alta_submit(
     relation_type: str = Form("ordinaria"),
     usuaria_id: str = Form(""),
     geo_consent: bool = Form(False),
+    weekly_hours: str = Form(""),
+    annual_hours_cap: str = Form(""),
+    flexible_schedule: bool = Form(False),
     claims: dict = Depends(require_web_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -441,6 +459,9 @@ async def admin_alta_submit(
         relation_type=relation_type,
         usuaria_id=usuaria,
         geo_consent=geo_consent,
+        weekly_hours=float(weekly_hours) if weekly_hours.strip() else None,
+        annual_hours_cap=float(annual_hours_cap) if annual_hours_cap.strip() else None,
+        flexible_schedule=flexible_schedule,
     )
     return _render(
         request,
@@ -470,6 +491,8 @@ async def admin_politica_submit(
     pause_computable_default: bool = Form(False),
     computation_period: str = Form(...),
     ordinary_hours_per_period: float = Form(...),
+    annual_hours_cap: float = Form(...),
+    annual_vacation_days: float = Form(...),
     desconexion_start: str = Form(""),
     desconexion_end: str = Form(""),
     claims: dict = Depends(require_web_role("admin")),
@@ -479,6 +502,8 @@ async def admin_politica_submit(
     policy.pause_computable_default = pause_computable_default
     policy.computation_period = computation_period
     policy.ordinary_hours_per_period = ordinary_hours_per_period
+    policy.annual_hours_cap = annual_hours_cap
+    policy.annual_vacation_days = annual_vacation_days
     policy.desconexion_start = (
         time_cls.fromisoformat(desconexion_start) if desconexion_start.strip() else None
     )
@@ -610,6 +635,312 @@ async def admin_correccion(
     )
 
 
+# --- Editar jornada de un trabajador (REQ-27/29) ------------------------------------
+
+
+@router.get("/admin/trabajador/{worker_id}")
+async def admin_trabajador_form(
+    request: Request,
+    worker_id: uuid.UUID,
+    claims: dict = Depends(require_web_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    worker = await db.get(Worker, worker_id)
+    if worker is None:
+        return _render(request, "admin/trabajador.html", claims=claims, worker=None)
+    return _render(request, "admin/trabajador.html", claims=claims, worker=worker)
+
+
+@router.post("/admin/trabajador/{worker_id}")
+async def admin_trabajador_submit(
+    request: Request,
+    worker_id: uuid.UUID,
+    weekly_hours: str = Form(""),
+    annual_hours_cap: str = Form(""),
+    flexible_schedule: bool = Form(False),
+    geo_consent: bool = Form(False),
+    claims: dict = Depends(require_web_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    worker = await db.get(Worker, worker_id)
+    if worker is None:
+        return _render(request, "admin/trabajador.html", claims=claims, worker=None)
+    worker.weekly_hours = float(weekly_hours) if weekly_hours.strip() else None
+    worker.annual_hours_cap = float(annual_hours_cap) if annual_hours_cap.strip() else None
+    worker.flexible_schedule = flexible_schedule
+    worker.geo_consent = geo_consent
+    await db.commit()
+    await db.refresh(worker)
+    return _render(
+        request, "admin/trabajador.html", claims=claims, worker=worker, message="Jornada guardada."
+    )
+
+
+# --- Ausencias: vacaciones, bajas y permisos + justificante (REQ-28) ----------------
+# Alta/gestión SOLO admin/gestora; el trabajador solo consulta lo suyo (ver /mis-ausencias).
+
+
+async def _absence_view_rows(db: AsyncSession, absences: list[Absence]) -> list[dict]:
+    """Anota cada ausencia con sus horas y si tiene justificante (sin servir el binario)."""
+    ids = [a.id for a in absences]
+    with_doc: dict[uuid.UUID, uuid.UUID] = {}
+    if ids:
+        rows = (
+            await db.execute(
+                select(AbsenceDocument.absence_id, AbsenceDocument.id).where(
+                    AbsenceDocument.absence_id.in_(ids)
+                )
+            )
+        ).all()
+        with_doc = {absence_id: doc_id for absence_id, doc_id in rows}
+    return [
+        {
+            "a": a,
+            "hours": absence_hours(a),
+            "doc_id": with_doc.get(a.id),
+        }
+        for a in absences
+    ]
+
+
+@router.get("/admin/ausencias")
+async def admin_ausencias(
+    request: Request,
+    worker_id: uuid.UUID | None = None,
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    query = select(Absence).order_by(Absence.start_date.desc())
+    if worker_id is not None:
+        query = query.where(Absence.worker_id == worker_id)
+    absences = (await db.execute(query)).scalars().all()
+    return _render(
+        request,
+        "admin/ausencias.html",
+        claims=claims,
+        workers=await _all_workers(db),
+        rows=await _absence_view_rows(db, list(absences)),
+        selected=str(worker_id) if worker_id else "",
+        absence_types=ABSENCE_TYPES,
+        permiso_subtypes=PERMISO_SUBTYPES,
+    )
+
+
+@router.post("/admin/ausencias")
+async def admin_ausencias_crear(
+    request: Request,
+    worker_id: uuid.UUID = Form(...),
+    absence_type: str = Form(...),
+    subtype: str = Form(""),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    start_time: str = Form(""),
+    end_time: str = Form(""),
+    note: str = Form(""),
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    error = None
+    message = None
+    try:
+        body = AbsenceCreate(
+            worker_id=worker_id,
+            absence_type=absence_type,
+            subtype=subtype or None,
+            start_date=date_cls.fromisoformat(start_date),
+            end_date=date_cls.fromisoformat(end_date),
+            start_time=time_cls.fromisoformat(start_time) if start_time.strip() else None,
+            end_time=time_cls.fromisoformat(end_time) if end_time.strip() else None,
+            note=note or None,
+        )
+    except (ValueError, TypeError) as exc:
+        error = f"Datos de ausencia no válidos: {exc}"
+        body = None
+
+    if body is not None:
+        existing = (
+            await db.execute(select(Absence).where(Absence.worker_id == body.worker_id))
+        ).scalars().all()
+        if overlaps(
+            body.start_date, body.end_date, body.start_time, body.end_time, list(existing)
+        ):
+            error = "La ausencia solapa con otra ya registrada del trabajador."
+        else:
+            db.add(
+                Absence(
+                    worker_id=body.worker_id,
+                    absence_type=body.absence_type,
+                    subtype=body.subtype,
+                    start_date=body.start_date,
+                    end_date=body.end_date,
+                    start_time=body.start_time,
+                    end_time=body.end_time,
+                    status=body.status,
+                    note=body.note,
+                    created_by=uuid.UUID(claims["worker_id"]),
+                )
+            )
+            await db.commit()
+            message = "Ausencia registrada."
+
+    absences = (
+        await db.execute(select(Absence).order_by(Absence.start_date.desc()))
+    ).scalars().all()
+    return _render(
+        request,
+        "admin/ausencias.html",
+        claims=claims,
+        workers=await _all_workers(db),
+        rows=await _absence_view_rows(db, list(absences)),
+        selected="",
+        absence_types=ABSENCE_TYPES,
+        permiso_subtypes=PERMISO_SUBTYPES,
+        error=error,
+        message=message,
+    )
+
+
+@router.post("/admin/ausencias/{absence_id}/cancelar")
+async def admin_ausencias_cancelar(
+    request: Request,
+    absence_id: uuid.UUID,
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    absence = await db.get(Absence, absence_id)
+    if absence is not None:
+        absence.status = "cancelada"
+        absence.updated_at = utc_now()
+        await db.commit()
+    return RedirectResponse("/admin/ausencias", status_code=303)
+
+
+@router.post("/admin/ausencias/{absence_id}/justificante")
+async def admin_ausencias_justificante(
+    request: Request,
+    absence_id: uuid.UUID,
+    file: UploadFile = File(...),
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    absence = await db.get(Absence, absence_id)
+    error = None
+    message = None
+    if absence is None:
+        error = "Ausencia no existe."
+    elif file.content_type not in JUSTIFICANTE_CONTENT_TYPES:
+        error = f"Tipo no admitido: {file.content_type}. Solo PDF/JPG/PNG."
+    else:
+        data = await file.read()
+        if not data or len(data) > MAX_JUSTIFICANTE_BYTES:
+            error = "El justificante está vacío o supera el tamaño máximo (5 MB)."
+        else:
+            db.add(
+                AbsenceDocument(
+                    absence_id=absence_id,
+                    filename=file.filename or "justificante",
+                    content_type=file.content_type,
+                    byte_size=len(data),
+                    content_encrypted=encrypt_blob(data),
+                    uploaded_by=uuid.UUID(claims["worker_id"]),
+                )
+            )
+            absence.justified = True
+            absence.verified_by = uuid.UUID(claims["worker_id"])
+            absence.updated_at = utc_now()
+            await db.commit()
+            message = "Justificante subido."
+
+    absences = (
+        await db.execute(select(Absence).order_by(Absence.start_date.desc()))
+    ).scalars().all()
+    return _render(
+        request,
+        "admin/ausencias.html",
+        claims=claims,
+        workers=await _all_workers(db),
+        rows=await _absence_view_rows(db, list(absences)),
+        selected="",
+        absence_types=ABSENCE_TYPES,
+        permiso_subtypes=PERMISO_SUBTYPES,
+        error=error,
+        message=message,
+    )
+
+
+@router.get("/descargar/justificante/{absence_id}/{doc_id}")
+async def descargar_justificante(
+    absence_id: uuid.UUID,
+    doc_id: uuid.UUID,
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Descarga (cookie-auth) del justificante: el dueño (self) o un rol de supervisión."""
+    absence = await db.get(Absence, absence_id)
+    if absence is None:
+        raise HTTPException(status_code=404, detail="Ausencia no existe.")
+    own = uuid.UUID(claims["worker_id"])
+    if absence.worker_id != own and claims.get("role") not in OVERSIGHT_ROLES:
+        raise HTTPException(status_code=403, detail="No autorizado.")
+    doc = await db.get(AbsenceDocument, doc_id)
+    if doc is None or doc.absence_id != absence_id:
+        raise HTTPException(status_code=404, detail="Justificante no existe.")
+    return Response(
+        content=decrypt_blob(doc.content_encrypted),
+        media_type=doc.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
+    )
+
+
+# --- Portal del trabajador: mis ausencias + saldo de vacaciones (REQ-18/28) ----------
+
+
+@router.get("/mis-ausencias")
+async def mis_ausencias(
+    request: Request,
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    worker_id = uuid.UUID(claims["worker_id"])
+    absences = (
+        await db.execute(
+            select(Absence)
+            .where(Absence.worker_id == worker_id)
+            .order_by(Absence.start_date.desc())
+        )
+    ).scalars().all()
+    balance = await vacation_balance_for(db, worker_id)
+
+    # Estado anual del tope de jornada del propio trabajador.
+    worker = await db.get(Worker, worker_id)
+    policy = await db.get(TimePolicy, 1)
+    records = (
+        await db.execute(
+            select(TimeRecord)
+            .where(TimeRecord.worker_id == worker_id)
+            .order_by(TimeRecord.seq.asc())
+        )
+    ).scalars().all()
+    ann = annual_status(list(records), worker, policy, utc_now())
+    annual = {
+        "year": ann["year"],
+        "worked_min": _minutes(ann["worked"]),
+        "cap_min": _minutes(ann["cap"]),
+        "remaining_min": _minutes(ann["remaining"]),
+        "exceeded": ann["exceeded"],
+        "near": ann["near"],
+        "flexible": worker.flexible_schedule,
+    }
+    return _render(
+        request,
+        "mis_ausencias.html",
+        claims=claims,
+        rows=await _absence_view_rows(db, list(absences)),
+        balance=balance,
+        annual=annual,
+    )
+
+
 # --- Horas extra por trabajador (REQ-08/12) ------------------------------------------
 
 
@@ -622,6 +953,7 @@ async def admin_horas(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     report = None
+    annual = None
     worker = None
     if worker_id is not None:
         worker = await db.get(Worker, worker_id)
@@ -650,12 +982,23 @@ async def admin_horas(
                 "complementarias_min": _minutes(out["complementarias"]),
                 "ordinary_min": _minutes(out["ordinary"]),
             }
+            ann = annual_status(list(records), worker, policy, reference)
+            annual = {
+                "year": ann["year"],
+                "worked_min": _minutes(ann["worked"]),
+                "cap_min": _minutes(ann["cap"]),
+                "remaining_min": _minutes(ann["remaining"]),
+                "exceeded": ann["exceeded"],
+                "near": ann["near"],
+                "flexible": worker.flexible_schedule,
+            }
     return _render(
         request,
         "admin/horas.html",
         claims=claims,
         workers=await _all_workers(db),
         report=report,
+        annual=annual,
         worker=worker,
         selected=str(worker_id) if worker_id else "",
         date=date.isoformat() if date else "",

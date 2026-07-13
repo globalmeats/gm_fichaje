@@ -22,6 +22,14 @@
     <input id="ordinary_hours_per_period" name="ordinary_hours_per_period" type="number"
            step="0.5" min="0" value="{{ policy.ordinary_hours_per_period }}">
 
+    <label for="annual_hours_cap">Tope anual de jornada global (horas)</label>
+    <input id="annual_hours_cap" name="annual_hours_cap" type="number"
+           step="1" min="0" value="{{ policy.annual_hours_cap }}">
+
+    <label for="annual_vacation_days">Días de vacaciones anuales</label>
+    <input id="annual_vacation_days" name="annual_vacation_days" type="number"
+           step="0.5" min="0" value="{{ policy.annual_vacation_days }}">
+
     <label for="desconexion_start">Inicio de ventana laboral (desconexión, opcional)</label>
     <input id="desconexion_start" name="desconexion_start" type="time"
            value="{{ policy.desconexion_start.strftime('%H:%M') if policy.desconexion_start else '' }}">

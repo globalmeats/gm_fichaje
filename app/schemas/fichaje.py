@@ -90,6 +90,28 @@ class PeriodSummary(BaseModel):
     efectivo_min: int
 
 
+class AnnualSummary(BaseModel):
+    """Estado del tope anual de jornada del trabajador (REQ-27)."""
+
+    year: int
+    worked_min: int
+    cap_min: int
+    remaining_min: int
+    exceeded: bool
+    near: bool
+
+
+class VacationSummary(BaseModel):
+    """Saldo de vacaciones del año en curso (autodisponibilidad, REQ-18/28)."""
+
+    year: int
+    entitled: float
+    taken: int
+    remaining: float
+
+
 class SummaryResponse(BaseModel):
     today: list[JourneySummary]
     period: PeriodSummary
+    annual: AnnualSummary
+    vacation: VacationSummary

@@ -17,6 +17,8 @@ class TimePolicyResponse(BaseModel):
     pause_computable_default: bool
     computation_period: Literal["daily", "weekly", "monthly"]
     ordinary_hours_per_period: float
+    annual_hours_cap: float
+    annual_vacation_days: float
     updated_at: datetime
 
 
@@ -26,3 +28,5 @@ class TimePolicyUpdate(BaseModel):
     pause_computable_default: bool | None = None
     computation_period: Literal["daily", "weekly", "monthly"] | None = None
     ordinary_hours_per_period: float | None = Field(default=None, gt=0)
+    annual_hours_cap: float | None = Field(default=None, gt=0)
+    annual_vacation_days: float | None = Field(default=None, ge=0)

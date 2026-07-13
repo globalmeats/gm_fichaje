@@ -19,10 +19,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.core.time import utc_now
-from app.db.models import RecordCorrection, TimePolicy, TimeRecord, Worker
+from app.db.models import (
+    Absence,
+    AbsenceDocument,
+    RecordCorrection,
+    TimePolicy,
+    TimeRecord,
+    Worker,
+)
+from app.domain.absences import absence_hours, vacation_balance, vacation_days_taken
 from app.domain.export import build_report, to_csv, to_pdf
-from app.domain.hours import classify_overtime
-from app.schemas.export import ExportReport
+from app.domain.hours import (
+    annual_status,
+    classify_overtime,
+    period_window,
+    reconstruct_journeys,
+)
+from app.domain.schedule import effective_vacation_days
+from app.schemas.export import ExportAbsenceRow, ExportReport
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -73,10 +87,76 @@ async def load_report(
         )
     ).scalars().all()
 
+    now = utc_now()
     summary = classify_overtime(
-        records, policy, utc_now(), relation_type=worker.relation_type
+        records, policy, now, relation_type=worker.relation_type
     )
-    return build_report(worker, list(records), list(corrections), summary)
+
+    # Tope anual del convenio (REQ-27) sobre horas efectivas del año natural.
+    annual = annual_status(list(records), worker, policy, now)
+
+    # Pausa total del periodo (descanso de comida visible), sobre la misma ventana del resumen.
+    p_start, p_end = period_window(now, policy.computation_period)
+    pausa_total = timedelta(0)
+    for j in reconstruct_journeys(list(records)):
+        if j.check_out is not None and p_start <= j.check_in < p_end:
+            for ps, pe in j.pauses:
+                pausa_total += pe - ps
+    pausa_min = int(pausa_total.total_seconds() // 60)
+
+    # Ausencias del trabajador: saldo de vacaciones del año + lista de ausencias del rango.
+    all_absences = (
+        await db.execute(select(Absence).where(Absence.worker_id == target))
+    ).scalars().all()
+    taken = vacation_days_taken(list(all_absences), now.year)
+    entitled = effective_vacation_days(worker, policy)
+    vacation = vacation_balance(entitled, taken)
+
+    doc_ids = set(
+        (
+            await db.execute(
+                select(AbsenceDocument.absence_id).where(
+                    AbsenceDocument.absence_id.in_([a.id for a in all_absences])
+                )
+            )
+        ).scalars().all()
+    ) if all_absences else set()
+
+    def _in_range(a: Absence) -> bool:
+        if start is not None and a.end_date < start:
+            return False
+        if end is not None and a.start_date > end:
+            return False
+        return True
+
+    absence_rows = [
+        ExportAbsenceRow(
+            absence_type=a.absence_type,
+            subtype=a.subtype,
+            start_date=a.start_date,
+            end_date=a.end_date,
+            start_time=a.start_time,
+            end_time=a.end_time,
+            status=a.status,
+            justified=a.justified,
+            hours=absence_hours(a),
+            has_document=a.id in doc_ids,
+        )
+        for a in all_absences
+        if _in_range(a)
+    ]
+
+    return build_report(
+        worker,
+        list(records),
+        list(corrections),
+        summary,
+        annual=annual,
+        vacation=vacation,
+        absences=absence_rows,
+        pausa_min=pausa_min,
+        flexible_schedule=worker.flexible_schedule,
+    )
 
 
 @router.get("/records.csv")

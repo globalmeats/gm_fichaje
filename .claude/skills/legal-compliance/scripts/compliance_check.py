@@ -46,6 +46,9 @@ REQUISITOS: dict[str, tuple[str, list[str]]] = {
     "REQ-24": ("REFORMA", [r"\brls\b", r"role|rol", r"permiss|permiso"]),
     "REQ-25": ("REFORMA", [r"alert", r"audit", r"anomal"]),
     "REQ-26": ("REFORMA", [r"ordinari", r"complementar", r"desconexi"]),
+    "REQ-27": ("VIGENTE", [r"annual.?cap|tope.?anual", r"1760", r"convenio"]),
+    "REQ-28": ("REFORMA", [r"vacacion|absence|ausencia", r"balance|justificante", r"baja|permiso"]),
+    "REQ-29": ("VIGENTE", [r"flexible|flexibilidad", r"jornada", r"weekly_hours|jornada.?pactada"]),
 }
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}

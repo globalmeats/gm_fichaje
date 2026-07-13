@@ -8,14 +8,16 @@ mantenerse sincronizados a mano. Si cambias una columna aquí, añade una migrac
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Integer,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -60,11 +62,31 @@ ALERT_TYPES = (
     "mutation_attempt",
     "anomalous_access",
     "off_hours",
+    "annual_cap",
 )
 ALERT_SEVERITIES = ("info", "warning", "critical")
 
 # Acciones del log de retención (REQ-03): 'eligible' (cruzó los 4 años) / 'deleted' (borrado).
 RETENTION_ACTIONS = ("eligible", "deleted")
+
+# Ausencias (REQ-28): tipo, estados y subtipos de permiso retribuido (art. 37.3 ET / convenio).
+ABSENCE_TYPES = ("vacaciones", "baja", "permiso")
+ABSENCE_STATUSES = ("pendiente", "aprobada", "rechazada", "cancelada")
+# Catálogo de subtipos de permiso. Se valida en la app (no en BD) porque varía por convenio.
+PERMISO_SUBTYPES = (
+    "cita_medica",
+    "acompanamiento_familiar",
+    "mudanza",
+    "fallecimiento",
+    "ingreso_hospitalario",
+    "deber_inexcusable",
+    "matrimonio",
+    "lactancia",
+    "otro",
+)
+# Tipos de justificante de ASISTENCIA admitidos (nunca informes con diagnóstico) y tope (5 MB).
+JUSTIFICANTE_CONTENT_TYPES = ("application/pdf", "image/jpeg", "image/png")
+MAX_JUSTIFICANTE_BYTES = 5 * 1024 * 1024
 
 
 class Base(DeclarativeBase):
@@ -127,6 +149,14 @@ class Worker(Base):
     # Empresa usuaria/principal cuando la obligación no recae en nosotros (ETT/subcontrata).
     usuaria_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     geo_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    # Jornada por trabajador (REQ-27/29). NULL = usa el default global de time_policy.
+    weekly_hours: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    annual_hours_cap: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    # Marca de horario flexible (clave para la subvención).
+    flexible_schedule: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
 
@@ -212,6 +242,14 @@ class TimePolicy(Base):
     # NULL = sin control de desconexión configurado.
     desconexion_start: Mapped[time | None] = mapped_column(Time, nullable=True)
     desconexion_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    # Defaults globales del convenio (REQ-27/29): tope anual de jornada y días de vacaciones.
+    # Un trabajador puede sobreescribir el tope en worker.annual_hours_cap (fallback aquí).
+    annual_hours_cap: Mapped[float] = mapped_column(
+        Numeric, nullable=False, server_default=text("1760")
+    )
+    annual_vacation_days: Mapped[float] = mapped_column(
+        Numeric, nullable=False, server_default=text("22")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -262,7 +300,7 @@ class AuditAlert(Base):
     __table_args__ = (
         CheckConstraint(
             "alert_type IN ('chain_broken','login_failed','account_locked',"
-            "'mutation_attempt','anomalous_access','off_hours')",
+            "'mutation_attempt','anomalous_access','off_hours','annual_cap')",
             name="audit_alert_type_check",
         ),
         CheckConstraint(
@@ -316,5 +354,89 @@ class RetentionLog(Base):
     executed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
     logged_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class Absence(Base):
+    """Ausencia: vacaciones, baja o permiso retribuido (REQ-28).
+
+    MUTABLE (config/HR, no append-only): se puede cancelar/editar. La inmutabilidad solo
+    aplica a `time_record`. Marcar una ausencia justifica que no se fiche ese tiempo. La
+    `baja` se registra SOLO con fechas + estado (sin dato clínico); `subtype` solo aplica a
+    `permiso` y se valida en la app contra `PERMISO_SUBTYPES`.
+    """
+
+    __tablename__ = "absence"
+    __table_args__ = (
+        CheckConstraint(
+            "absence_type IN ('vacaciones','baja','permiso')",
+            name="absence_type_check",
+        ),
+        CheckConstraint(
+            "status IN ('pendiente','aprobada','rechazada','cancelada')",
+            name="absence_status_check",
+        ),
+        CheckConstraint("end_date >= start_date", name="absence_date_order_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    worker_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    absence_type: Mapped[str] = mapped_column(String, nullable=False)
+    subtype: Mapped[str | None] = mapped_column(String, nullable=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Ausencia por horas (cita médica): NULL/NULL = día(s) completo(s).
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'aprobada'")
+    )
+    justified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class AbsenceDocument(Base):
+    """Justificante de ASISTENCIA adjunto a una ausencia (REQ-28).
+
+    El binario se almacena CIFRADO (Fernet) en `content_encrypted`; nunca en claro. Solo
+    justificantes de asistencia (nunca informes con diagnóstico). MUTABLE: se puede borrar
+    un adjunto erróneo (ON DELETE CASCADE con la ausencia).
+    """
+
+    __tablename__ = "absence_document"
+    __table_args__ = (
+        CheckConstraint(
+            "content_type IN ('application/pdf','image/jpeg','image/png')",
+            name="absence_document_content_type_check",
+        ),
+        CheckConstraint(
+            "byte_size > 0 AND byte_size <= 5242880",
+            name="absence_document_size_check",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    absence_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(String, nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
