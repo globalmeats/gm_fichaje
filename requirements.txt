@@ -1,0 +1,4 @@
+# Railway/Railpack solo instala dependencias desde requirements.txt o un lockfile.
+# La fuente de verdad de las dependencias es pyproject.toml: "." instala el propio
+# paquete y pip resuelve sus dependencias desde ahí. No listar paquetes aquí.
+.
