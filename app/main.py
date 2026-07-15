@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, corrections, export, fichaje, portal, reports
+from app.api import absences, admin, auth, corrections, export, fichaje, portal, reports
 from app.api.export import OVERSIGHT_ROLES
 from app.core.config import assert_eu_region, assert_secure_secrets
 from app.web import STATIC_DIR, templates
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Fichajes Global Meats", version="0.1.0", lifespan=lifespan)
 
 app.include_router(auth.router)
+app.include_router(absences.router)
 app.include_router(admin.router)
 app.include_router(fichaje.router)
 app.include_router(reports.router)
