@@ -34,3 +34,20 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   es constante en código; debería poder editarse como config del convenio.
 - **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
   justificantes subidos no se escanean ni tienen política de borrado documentada.
+- **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
+  producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
+  Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en
+  almacenamiento UE; documentar destino y retención en el RAT. La conservación de 4 años
+  (regla de oro nº 4) no está garantizada sin esto. Reconsiderar upgrade a Pro cuando haya
+  presupuesto: elimina esta pieza y añade backups diarios gestionados.
+- **Reset de esquema antes del go-live (go-live, 15/07/2026)** — durante la preparación
+  corrió una suite de pytest contra el proyecto Supabase de producción (antes de fijar la
+  regla "tests solo contra Postgres local"). Como los triggers de inmutabilidad impiden
+  limpiar residuos por la vía normal, el último paso antes de meter datos reales es: drop
+  del esquema + `python -m app.db.migrate` desde cero + recrear el admin (`scripts.seed_admin`).
+  Los tests van SIEMPRE contra el Postgres local de test (puerto 55432), nunca contra prod.
+- **Supabase plan Free: keep-alive anti-pausa (go-live, 15/07/2026)** — Free pausa proyectos
+  tras ~7 días "sin actividad" y la conexión directa por pooler (asyncpg) puede no contar
+  como actividad. Mitigación: keep-alive periódico en la Fase 2 y vigilancia del estado del
+  proyecto. La Data API queda desactivada a propósito (minimización: la app no usa
+  supabase-js; solo Postgres directo).
