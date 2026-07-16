@@ -74,6 +74,18 @@ class Settings(BaseSettings):
     # un evento offline conserva su hora real, pero se rechaza si es futuro o demasiado viejo.
     max_offline_age_hours: int = 72
 
+    # Backup cifrado a Cloudflare R2 (plan Free de Supabase sin backups gestionados; ver
+    # docs/DEFERRED.md y app/jobs/backup.py). Solo los necesita el servicio cron de backup;
+    # el job valida su presencia al arrancar. El endpoint debe ser el jurisdiccional UE
+    # (`https://<account>.eu.r2.cloudflarestorage.com`) para cumplir REQ-23.
+    backup_encryption_key: str = ""
+    r2_endpoint: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = ""
+    backup_keep_daily: int = 30
+    backup_keep_monthly: int = 12
+
 
 settings = Settings()
 
