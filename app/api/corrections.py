@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_claims, get_db, require_role
 from app.audit.chain import append_correction
 from app.core.crypto import encrypt_geo
+from app.core.logging import log_event
 from app.db.models import EVENT_TYPES, MODALIDADES, RecordCorrection, TimeRecord
 from app.schemas.correction import CorrectionCreate, CorrectionResponse
 
@@ -91,7 +92,7 @@ async def create_correction(
     claims: dict = Depends(require_role("admin", "supervisor")),
     db: AsyncSession = Depends(get_db),
 ) -> RecordCorrection:
-    return await apply_correction(
+    correction = await apply_correction(
         db,
         record_id=record_id,
         field=body.field,
@@ -99,6 +100,14 @@ async def create_correction(
         reason=body.reason,
         author_id=uuid.UUID(claims["worker_id"]),
     )
+    # R3: rastro operativo (el contenido corregido ya queda sellado en BD, no se loguea).
+    log_event(
+        "correction_created",
+        record_id=str(record_id),
+        field=body.field,
+        author_id=claims["worker_id"],
+    )
+    return correction
 
 
 @router.get("/{record_id}/corrections", response_model=list[CorrectionResponse])

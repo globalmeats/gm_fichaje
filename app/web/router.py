@@ -29,6 +29,7 @@ from app.api.fichaje import _alert_if_off_hours, _ordered_event_types
 from app.audit.chain import append_event
 from app.audit.verify import verify_all
 from app.core.crypto import decrypt_blob, encrypt_blob
+from app.core.logging import client_ip
 from app.core.security import create_access_token, generate_pin, hash_pin
 from app.core.time import utc_now
 from app.db.models import (
@@ -197,7 +198,7 @@ async def login_submit(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
-        worker = await authenticate(db, employee_code, pin)
+        worker = await authenticate(db, employee_code, pin, ip=client_ip(request))
     except HTTPException as exc:
         return _render(
             request,
@@ -244,7 +245,7 @@ async def change_pin_submit(
 
     try:
         worker = await change_worker_pin(
-            db, uuid.UUID(claims["worker_id"]), current_pin, new_pin
+            db, uuid.UUID(claims["worker_id"]), current_pin, new_pin, ip=client_ip(request)
         )
     except HTTPException as exc:
         return _render(

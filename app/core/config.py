@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     db_require_tls: bool = True
     geo_encryption_key: str = DEV_GEO_KEY
 
+    # Confiar en la cabecera CF-Connecting-IP para la IP real de los logs. Solo debe
+    # activarse cuando Cloudflare está delante (Fase 3 del go-live); sin proxy, la
+    # cabecera sería falsificable por el cliente.
+    trust_cf_connecting_ip: bool = False
+
     # Ventana de tolerancia para fichajes offline sincronizados a posteriori (REQ-22):
     # un evento offline conserva su hora real, pero se rechaza si es futuro o demasiado viejo.
     max_offline_age_hours: int = 72

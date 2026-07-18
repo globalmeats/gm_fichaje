@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
+from app.core.logging import log_event
 from app.core.time import utc_now
 from app.db.models import (
     Absence,
@@ -169,6 +170,15 @@ async def export_csv(
 ) -> StreamingResponse:
     report = await load_report(db, claims, worker_id, start, end)
     content = to_csv(report)
+    # R3: quién exporta qué rango (el contenido no se loguea).
+    log_event(
+        "export",
+        format="csv",
+        by=claims["worker_id"],
+        target=report.employee_code,
+        start=str(start) if start else None,
+        end=str(end) if end else None,
+    )
     filename = f"fichajes_{report.employee_code}.csv"
     return StreamingResponse(
         iter([content]),
@@ -187,6 +197,14 @@ async def export_pdf(
 ) -> Response:
     report = await load_report(db, claims, worker_id, start, end)
     content = to_pdf(report)
+    log_event(
+        "export",
+        format="pdf",
+        by=claims["worker_id"],
+        target=report.employee_code,
+        start=str(start) if start else None,
+        end=str(end) if end else None,
+    )
     filename = f"fichajes_{report.employee_code}.pdf"
     return Response(
         content=content,

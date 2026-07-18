@@ -11,13 +11,14 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.audit.alerts import record_alert
 from app.core.config import settings
+from app.core.logging import client_ip, log_event
 from app.core.security import (
     create_access_token,
     hash_pin,
@@ -42,21 +43,26 @@ async def _get_worker_by_code(db: AsyncSession, employee_code: str) -> Worker | 
     return await db.scalar(select(Worker).where(Worker.code_norm == code_norm))
 
 
-async def authenticate(db: AsyncSession, employee_code: str, pin: str) -> Worker:
+async def authenticate(
+    db: AsyncSession, employee_code: str, pin: str, *, ip: str | None = None
+) -> Worker:
     """Valida credenciales y devuelve el trabajador (REQ-05).
 
     Lógica compartida por la API JSON (`/auth/login`) y la ruta web SSR (`/login`):
     respuesta uniforme (no filtra existencia), lockout tras N fallos y rastro de auditoría
-    (REQ-25). Lanza 401 (`_INVALID`) o 429 si la cuenta está bloqueada.
+    (REQ-25). Lanza 401 (`_INVALID`) o 429 si la cuenta está bloqueada. `ip` solo alimenta
+    el log de seguridad (R3); nunca la respuesta.
     """
     worker = await _get_worker_by_code(db, employee_code)
 
     # Respuesta uniforme para no filtrar si el código existe.
     if worker is None or not worker.is_active:
+        log_event("login_failed", reason="unknown_or_inactive", ip=ip)
         raise _INVALID
 
     now = utc_now()
     if worker.locked_until is not None and worker.locked_until > now:
+        log_event("login_locked_attempt", warning=True, code=worker.code, ip=ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Cuenta bloqueada temporalmente por intentos fallidos.",
@@ -73,6 +79,7 @@ async def authenticate(db: AsyncSession, employee_code: str, pin: str) -> Worker
         await record_alert(
             db, "login_failed", "PIN incorrecto en login.", worker_id=worker.id
         )
+        log_event("login_failed", reason="bad_pin", code=worker.code, ip=ip)
         if locked:
             await record_alert(
                 db,
@@ -81,18 +88,22 @@ async def authenticate(db: AsyncSession, employee_code: str, pin: str) -> Worker
                 worker_id=worker.id,
                 severity="critical",
             )
+            log_event("account_locked", warning=True, code=worker.code, ip=ip)
         raise _INVALID
 
     # Éxito: limpia el contador de fallos.
     worker.failed_attempts = 0
     worker.locked_until = None
     await db.commit()
+    log_event("login_ok", code=worker.code, ip=ip)
     return worker
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    worker = await authenticate(db, body.employee_code, body.pin)
+async def login(
+    body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    worker = await authenticate(db, body.employee_code, body.pin, ip=client_ip(request))
     token = create_access_token(
         worker_id=str(worker.id), role=worker.role, pin_temporary=worker.pin_temporary
     )
@@ -100,7 +111,12 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
 
 
 async def change_worker_pin(
-    db: AsyncSession, worker_id: uuid.UUID, current_pin: str, new_pin: str
+    db: AsyncSession,
+    worker_id: uuid.UUID,
+    current_pin: str,
+    new_pin: str,
+    *,
+    ip: str | None = None,
 ) -> Worker:
     """Cambia el PIN tras validarlo (REQ-05). Compartido por API y ruta web.
 
@@ -131,17 +147,23 @@ async def change_worker_pin(
     worker.pin_hash = hash_pin(new_pin)
     worker.pin_temporary = False
     await db.commit()
+    log_event("pin_changed", code=worker.code, ip=ip)
     return worker
 
 
 @router.post("/change-pin", response_model=TokenResponse)
 async def change_pin(
     body: PinChange,
+    request: Request,
     claims: dict = Depends(get_current_claims),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     worker = await change_worker_pin(
-        db, uuid.UUID(claims["worker_id"]), body.current_pin, body.new_pin
+        db,
+        uuid.UUID(claims["worker_id"]),
+        body.current_pin,
+        body.new_pin,
+        ip=client_ip(request),
     )
     # Token nuevo ya sin la marca de PIN temporal.
     token = create_access_token(

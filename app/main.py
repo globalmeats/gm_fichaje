@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import absences, admin, auth, corrections, export, fichaje, portal, reports
 from app.api.export import OVERSIGHT_ROLES
 from app.core.config import assert_eu_region, assert_secure_secrets
+from app.core.logging import setup_logging
 from app.web import STATIC_DIR, templates
 from app.web import router as web
 from app.web.session import WebForbidden, WebRedirect, web_claims
@@ -27,6 +28,8 @@ async def lifespan(app: FastAPI):
     assert_eu_region()
     # B1: no arrancar en prod/staging con secretos por defecto de desarrollo.
     assert_secure_secrets()
+    # R3: eventos de seguridad como JSON a stdout (los captura Railway).
+    setup_logging()
     yield
 
 
