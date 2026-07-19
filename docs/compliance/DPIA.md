@@ -29,8 +29,12 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
     desplazamientos, correcciones con autor y motivo.
   - **Geolocalización puntual** (opcional): coordenada del **instante** del
     fichaje, solo en modalidad móvil y **con consentimiento** del trabajador.
-- **No se tratan** datos de categorías especiales. **No hay biometría**
-  (prohibida por AEPD/reforma). Sin perfilado ni decisiones automatizadas.
+  - **Categoría especial (art. 9 RGPD)**: la ausencia tipo `baja` (incapacidad
+    temporal) es **dato de salud** por su mera existencia. Se trata con base en el
+    **art. 9.2.b** (obligaciones en materia de Derecho laboral/seguridad social),
+    minimizada a fechas/estado + justificante de **asistencia**, sin diagnóstico.
+- **No hay biometría** (prohibida por AEPD/reforma). Sin perfilado ni decisiones
+  automatizadas.
 
 ## 3. Base jurídica (art. 6 RGPD)
 
@@ -39,7 +43,11 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
   el consentimiento del trabajador para el registro en sí.
 - La **geolocalización** es accesoria y NO imprescindible para el registro; se trata
   sobre la base del **consentimiento** informado (art. 6.1.a), revocable, y se limita
-  al instante del fichaje (jamás rastreo continuo).
+  al instante del fichaje (jamás rastreo continuo). *Nota (a revisar con el DPO): en el
+  contexto laboral el consentimiento rara vez se considera "libre" (desequilibrio de
+  poder); si se mantuviera la geo, valorar el art. 6.1.b/f con juicio de proporcionalidad.
+  Es defendible aquí por ser genuinamente opcional y puntual.*
+- La `baja` (dato de salud) se ampara además en el **art. 9.2.b RGPD** (Derecho laboral).
 
 ## 4. Principio de minimización (art. 5.1.c)
 
@@ -60,16 +68,23 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
   Fernet (AES-128-CBC + HMAC, autenticado); la clave vive en variable de entorno,
   **fuera de la base de datos** (`app/core/crypto.py`). Un volcado de Postgres no
   expone coordenadas. El sellado encadena el *ciphertext*: manipularlo rompe el hash.
-- **Cifrado en tránsito** (REQ-23): conexión a Postgres con TLS (`sslmode=require`);
-  `scripts/check_region.py` falla el despliegue si no se fuerza TLS.
-- **Residencia en la UE** (REQ-23): `assert_eu_region()` valida región de deploy y
-  Supabase contra allowlist UE/EEE; el arranque y el despliegue **fallan** si no es UE.
+- **Cifrado en tránsito** (REQ-23): conexión a Postgres con TLS (`ssl=require`);
+  `scripts/check_region.py` y el arranque (`assert_db_tls`) fallan si no se fuerza TLS.
+- **Residencia en la UE** (REQ-23): `assert_eu_region()` valida la **configuración** de
+  región de deploy y Supabase contra allowlist UE/EEE (declarativa: comprueba las variables,
+  no geolocaliza al proveedor); el arranque y el despliegue **fallan** si no es UE. El bucket
+  de backups es de jurisdicción UE (verificado contra el endpoint por `app/jobs/backup.py`).
   Sin transferencias internacionales.
-- **Control de acceso** (REQ-24): aislamiento por trabajador en capa de aplicación;
-  roles de supervisión (supervisor/admin/rlt/inspeccion) para acceso global de solo
-  lectura; RLS escrita en las tablas con datos personales.
-- **Autenticación** (REQ-05/21): código de empleado único + PIN bcrypt; lockout
-  anti fuerza bruta; alertas de auditoría (`audit_alert`).
+- **Control de acceso** (REQ-24): la barrera **efectiva** es la capa de aplicación
+  (aislamiento self-vs-supervisión en cada endpoint) + roles (supervisor/admin/rlt/inspeccion)
+  para acceso global de solo lectura. Las políticas **RLS** están escritas en las tablas como
+  defensa en profundidad **pero no se evalúan en runtime** (la app conecta con un rol que las
+  omite); su activación es un pendiente (ver `docs/AUDITORIA-2026-07.md`, SEC-04). No debe
+  presentarse la RLS como salvaguarda activa hasta entonces.
+- **Autenticación y sesión** (REQ-05/21): código de empleado único + PIN bcrypt; lockout
+  anti fuerza bruta con trabajo constante (anti-enumeración); versión de token para
+  revocación de sesión (reset de PIN/bloqueo/cambio de PIN); alertas de auditoría
+  (`audit_alert`) y log de seguridad sin PII.
 - **Desconexión digital** (REQ-26): los accesos/fichajes fuera de la ventana laboral
   configurada generan una alerta `off_hours` para revisión, sin impedir el trabajo.
 
@@ -91,7 +106,7 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
 
 | Riesgo | Mitigación |
 |---|---|
-| Acceso no autorizado a registros ajenos | Aislamiento por trabajador + roles + RLS |
+| Acceso no autorizado a registros ajenos | Aislamiento por trabajador + roles en capa de aplicación (RLS como defensa en profundidad, pendiente de activar en runtime) |
 | Manipulación de registros | Append-only + hash encadenado + trigger + verificación |
 | Exposición de geolocalización | Cifrado en reposo (clave fuera de BD) + minimización + consentimiento |
 | Fuga por transferencia fuera de UE | Verificación de región UE en arranque y deploy |
@@ -119,7 +134,11 @@ Medidas y límites específicos:
 
 ## 9. Conclusión
 
-Con las medidas descritas, el riesgo residual para los derechos y libertades de los
-interesados se considera **bajo**. No se aprecia necesidad de consulta previa a la
-AEPD (art. 36 RGPD). Revisar esta evaluación ante cualquier cambio sustancial del
-tratamiento (p. ej. nuevas categorías de datos o nuevas finalidades).
+El tratamiento incluye una **categoría especial** (la `baja` como dato de salud, art. 9),
+minimizada al máximo (solo fechas/estado + justificante de asistencia, cifrado, acceso mínimo)
+y amparada en el art. 9.2.b. Con las medidas descritas, el riesgo residual para los derechos y
+libertades se considera **bajo-medio**; procede que el DPO valide la clasificación del art. 9,
+la base de la geolocalización y la conveniencia (o no) de consulta previa a la AEPD (art. 36).
+Encargados del tratamiento y estado de sus DPA: ver §5 del RAT
+(`registro-actividades-tratamiento.md`). Revisar esta evaluación ante cualquier cambio
+sustancial del tratamiento.

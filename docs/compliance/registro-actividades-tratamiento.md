@@ -19,8 +19,8 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 | **Categorías de interesados** | Trabajadores por cuenta ajena de Global Meats. |
 | **Categorías de datos** | Identificativos (nombre, apellidos, código de empleado); autenticación (hash de PIN); jornada (eventos, sellos temporales UTC, modalidad, desplazamientos, correcciones con autor y motivo); geolocalización **puntual** opcional (solo móvil + consentimiento). |
 | **Categorías especiales** | Ninguna. Sin biometría. |
-| **Destinatarios** | Internos: administración/supervisión, RLT. Externos: Inspección de Trabajo (acceso de solo lectura). Encargado del tratamiento: Supabase (alojamiento de BD, región UE). |
-| **Transferencias internacionales** | **Ninguna fuera de la UE/EEE.** Región de despliegue y de Supabase verificada en arranque y deploy (`assert_eu_region`). |
+| **Destinatarios** | Internos: administración/supervisión, RLT. Externos: Inspección de Trabajo (acceso de solo lectura). **Encargados del tratamiento (art. 28 RGPD)**: ver §5. |
+| **Transferencias internacionales** | **Ninguna fuera de la UE/EEE.** Región de despliegue y de Supabase verificada en arranque y deploy (`assert_eu_region`); el bucket de backups es de jurisdicción UE (verificado por `app/jobs/backup.py`). |
 | **Plazo de conservación** | **4 años** desde el registro (art. 34.9 ET). No se borran registros más recientes. Ciclo documentado en `retention_log`. |
 | **Ámbito (excepciones)** | Personal de **alta dirección** excluido del registro obligatorio (art. 2.1.a ET). En **ETT/subcontrata**, la obligación de registro recae en la empresa **usuaria/principal** (`worker.relation_type`, `usuaria_id`). |
 
@@ -31,9 +31,9 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 | **Fines** | Gestionar vacaciones, bajas y permisos del trabajador y acreditar la justificación de la ausencia. |
 | **Base jurídica** | Ejecución del contrato y cumplimiento de obligaciones laborales — **art. 6.1.b y 6.1.c RGPD**. |
 | **Categorías de interesados** | Trabajadores por cuenta ajena de Global Meats. |
-| **Categorías de datos** | Tipo de ausencia, subtipo de permiso, fechas/horas, estado, nota administrativa (sin dato clínico) y **justificante de asistencia** (documento cifrado). La `baja` se registra solo con fechas/estado. |
-| **Categorías especiales** | No se tratan datos de salud: solo justificante de **asistencia**, nunca diagnósticos. Riesgo de inferencia por asociación mitigado con acceso mínimo. |
-| **Destinatarios** | Internos: administración/gestora (alta y gestión); el propio trabajador (consulta de lo suyo). Encargado: Supabase (BD, región UE). |
+| **Categorías de datos** | Tipo de ausencia, subtipo de permiso, fechas/horas, estado, nota administrativa (sin dato clínico) y **justificante de asistencia** (documento cifrado). La `baja` se registra solo con fechas/estado, sin diagnóstico. |
+| **Categorías especiales (art. 9 RGPD)** | **SÍ.** El tipo `baja` (incapacidad temporal) es **dato de salud** por el mero hecho de existir, aun sin diagnóstico. **Base del art. 9.2.b RGPD** (cumplimiento de obligaciones en materia de Derecho laboral y de la seguridad social). Minimización estricta: solo fechas/estado y justificante de **asistencia** (nunca diagnósticos), cifrado y con acceso restringido. |
+| **Destinatarios** | Internos: administración/gestora (alta y gestión); el propio trabajador (consulta de lo suyo). Encargados (art. 28): ver §5. |
 | **Transferencias internacionales** | **Ninguna fuera de la UE/EEE.** |
 | **Plazo de conservación** | El necesario para acreditar la ausencia y sus efectos (retención del justificante por confirmar, ver `DEFERRED.md`). |
 | **Alta** | Solo administración/gestora (roles admin/supervisor); el trabajador no da de alta ausencias. |
@@ -45,8 +45,13 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 - **Residencia en la UE**: verificación automática de región (deploy + Supabase).
 - **Integridad/inmutabilidad**: append-only + hash SHA-256 encadenado + trigger
   anti-mutación + verificación de cadena; correcciones versionadas y selladas.
-- **Control de acceso**: roles, aislamiento por trabajador, RLS, autenticación por
-  PIN bcrypt con lockout y alertas de auditoría.
+- **Control de acceso**: la barrera efectiva es la **capa de aplicación** (comprobación
+  self-vs-supervisión en cada endpoint) + autenticación por PIN bcrypt con lockout, versión
+  de token para revocación de sesión, y alertas de auditoría. Las políticas **RLS** están
+  definidas en la base de datos como defensa en profundidad, pero **hoy no se evalúan en
+  runtime** (la app conecta con un rol que las omite); su activación efectiva está pendiente
+  (ver `docs/AUDITORIA-2026-07.md`, SEC-04). No debe presentarse la RLS como salvaguarda
+  activa mientras no se conecte con un rol restringido e inyección de claims por transacción.
 - **Minimización**: solo los datos imprescindibles; geo solo con consentimiento; en ausencias,
   solo justificante de **asistencia** (nunca diagnósticos) y la `baja` sin dato clínico.
 - **Cifrado del justificante**: el documento de ausencia se almacena cifrado (Fernet, clave
@@ -59,3 +64,18 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 - Rectificación: corrección append-only con motivo y autor (auditada).
 - Supresión: limitada por el deber legal de conservación (4 años).
 - Reclamación ante la AEPD: derecho del interesado.
+
+## 5. Encargados del tratamiento (art. 28 RGPD)
+
+Todos procesan datos personales en la **UE/EEE**. Debe existir un **contrato de encargo (DPA)**
+firmado con cada uno a nombre de Global Meats S.L.U.
+
+| Encargado | Rol | Ubicación | DPA |
+|---|---|---|---|
+| **Supabase** | Alojamiento de la base de datos (PostgreSQL) | UE (`eu-central-1`, Frankfurt) | Solicitado 16/07/2026; pendiente de confirmar/archivar |
+| **Railway** | Hosting/cómputo de la aplicación (procesa los datos en memoria) | UE (`europe-west4`) | **Pendiente** de verificar y archivar |
+| **Cloudflare** | Proxy/CDN delante de la app (ve IP y tráfico, incluidos PIN en tránsito) | UE | **Pendiente** (Fase 3 del go-live) |
+| **Cloudflare R2** | Almacena los **backups cifrados** de toda la BD | UE (bucket con jurisdicción European Union) | **Pendiente**; los dumps viajan cifrados (Fernet) antes de salir de la app |
+
+> Los backups a R2 contienen una copia de todas las categorías de datos (incluidas las del
+> art. 9): van cifrados en origen con clave que vive solo en el entorno de la app, nunca en R2.
