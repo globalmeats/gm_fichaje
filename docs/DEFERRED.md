@@ -81,6 +81,10 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   en `app/web/static/app.css` + fuentes self-hosted, `base.html` enlaza el CSS. Sin cambios de
   comportamiento (243 tests verde). Detalle en `docs/UI-REDISENO.md`. Pendiente opcional: pulir
   pantalla por pantalla los formularios admin más densos.
+- **UI responsive en todos los dispositivos (pendiente)** — el rediseño dejó la base estilada
+  pero varias pantallas desbordan en móvil/tablet (tablas de 7–9 columnas sin scroll contenido,
+  un solo breakpoint). Tarea con diagnóstico, estrategia (breakpoints, tabla→scroll/tarjeta) y
+  DoD en `docs/UI-RESPONSIVE.md`. Solo CSS/diseño, sin cambiar comportamiento.
 - **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
   producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
   Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en
