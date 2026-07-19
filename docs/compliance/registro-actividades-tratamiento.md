@@ -72,7 +72,7 @@ firmado con cada uno a nombre de Global Meats S.L.U.
 
 | Encargado | Rol | Ubicación | DPA |
 |---|---|---|---|
-| **Supabase** | Alojamiento de la base de datos (PostgreSQL) | UE (`eu-central-1`, Frankfurt) | Solicitado 16/07/2026; pendiente de confirmar/archivar |
+| **Supabase** | Alojamiento de la base de datos (PostgreSQL) | UE (`eu-west-1`, Irlanda) | Solicitado 16/07/2026; pendiente de confirmar/archivar |
 | **Railway** | Hosting/cómputo de la aplicación (procesa los datos en memoria) | UE (`europe-west4`) | **Pendiente** de verificar y archivar |
 | **Cloudflare** | Proxy/CDN delante de la app (ve IP y tráfico, incluidos PIN en tránsito) | UE | **Pendiente** (Fase 3 del go-live) |
 | **Cloudflare R2** | Almacena los **backups cifrados** de toda la BD | UE (bucket con jurisdicción European Union) | **Pendiente**; los dumps viajan cifrados (Fernet) antes de salir de la app |

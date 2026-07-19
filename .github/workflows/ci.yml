@@ -29,7 +29,7 @@ jobs:
       JWT_SECRET: ci-test-secret
       # Región UE para que el arranque/verificación no fallen en CI (REQ-23).
       DEPLOY_REGION: eu-west-1
-      SUPABASE_REGION: eu-central-1
+      SUPABASE_REGION: eu-west-1
       # El Postgres efímero de CI no tiene TLS (excepción de desarrollo documentada en
       # scripts/check_region.py). En producción no se define: el default es true y el
       # DATABASE_URL real lleva ssl=require.

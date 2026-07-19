@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # Residencia de datos (REQ-23)
     deploy_region: str = "eu-west-1"
-    supabase_region: str = "eu-central-1"
+    supabase_region: str = "eu-west-1"
     # Cifrado en reposo + transporte (REQ-20/23). En producción la conexión a Postgres usa
     # TLS (sslmode=require) y la clave de cifrado se inyecta por entorno (el default es solo dev).
     db_require_tls: bool = True
