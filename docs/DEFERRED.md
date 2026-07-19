@@ -35,11 +35,33 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
 - **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
   justificantes subidos no se escanean ni tienen política de borrado documentada.
 - **SEC-04(a): activar la RLS en runtime (auditoría 2026-07)** — las políticas RLS están
-  escritas pero no se evalúan (la app conecta como superusuario). Activarlas exige conectar con
-  un rol NO superusuario + inyectar claims por transacción (`SET LOCAL request.jwt.claims`) y
-  probar a fondo que ningún flujo legítimo (admin/oversight, jobs, backup) se rompe. Alto riesgo
-  de implementación → requiere OK humano. Mientras tanto, RAT/DPIA ya NO presentan la RLS como
-  salvaguarda activa (SEC-04(b) hecho).
+  escritas pero no se evalúan (la app conecta como superusuario, que las omite, y `auth.uid()`
+  es un stub que devuelve NULL). RAT/DPIA ya NO presentan la RLS como salvaguarda activa
+  (SEC-04(b) hecho). Alto riesgo de implementación → **requiere OK humano y sesión dedicada con
+  pruebas exhaustivas**. Pasos concretos que faltan:
+  1. **Rol de BD sin privilegios**: crear en Supabase un rol de aplicación NO superusuario y sin
+     `BYPASSRLS`, con los `GRANT` mínimos (SELECT/INSERT donde toque) sobre las tablas con datos
+     personales. Apuntar el `DATABASE_URL` de la app a ese rol (guardar el de superusuario solo
+     para migraciones/seed/jobs administrativos).
+  2. **`auth.uid()` / `auth.jwt()` reales**: reimplementarlas para leer del contexto de la
+     transacción, p. ej. `current_setting('request.jwt.claims', true)::json->>'worker_id'` y
+     `->>'role'` (hoy son stubs en `0001_init.sql`). Nueva migración.
+  3. **Inyección de claims por transacción**: en la dependencia de sesión (`app/api/deps.py::get_db`
+     y `app/web/session.py`), tras abrir la transacción ejecutar
+     `SET LOCAL request.jwt.claims = '{"worker_id": "...", "role": "..."}'` con los datos del JWT
+     ya verificado. Sin esto las políticas ven NULL y bloquean todo.
+  4. **Revisar cobertura de políticas**: que cada patrón de acceso legítimo esté permitido —
+     lectura propia del trabajador, lectura global de roles de supervisión (supervisor/admin/rlt/
+     inspeccion), inserción de fichajes propios, y **escrituras administrativas** (alta de
+     empleados, correcciones, ausencias, política). Cuidado con `append_event` (advisory lock),
+     el onboarding y el portal.
+  5. **Jobs y backup**: `retention`, `backup` y `restore` conectan hoy como superusuario y usan
+     `session_replication_role='replica'` (SEC-05). Decidir si siguen con un rol privilegiado
+     (fuera de RLS, correcto para tareas de sistema) o se adaptan. Migraciones y `seed_admin`
+     igual: rol privilegiado.
+  6. **Pruebas**: recorrer cada rol contra cada endpoint (incl. que un empleado NO ve ajenos ni
+     por RLS ni por app), los dos jobs, y el ciclo backup→restore, antes de dar por buena la
+     activación. Objetivo: misma funcionalidad, con la RLS como segunda muralla real.
 - **OPS-01: monitorización del backup diario (auditoría 2026-07)** — la conservación de 4 años
   depende del cron a R2; falta una alerta si un día no aparece backup nuevo (o el objeto más
   reciente supera ~26 h). Operativo, no código de la app. Alternativa: subir a Supabase Pro.
@@ -55,6 +77,9 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
 - **CMP-04: borrado tras los 4 años vs derecho de supresión (auditoría 2026-07)** — hoy nada
   borra tras la retención (tensión con art. 5.1.e). Decisión de política con DPO/laboralista,
   y su interacción con la inmutabilidad (borrado físico controlado vs anonimización).
+- **Rediseño de UI "Documento de origen" (post-go-live)** — reestilizado completo de la interfaz
+  al sistema de diseño corporativo de GlobalMeats. SOLO CSS/diseño, sin cambiar comportamiento.
+  Prompt y proceso por pasos en `docs/UI-REDISENO.md`. Abordar en sesión dedicada tras el go-live.
 - **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
   producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
   Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en
