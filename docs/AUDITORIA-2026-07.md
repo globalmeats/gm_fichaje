@@ -1,5 +1,21 @@
 # Auditoría integral y plan de remediación — gm_fichaje (2026-07-18)
 
+## Estado de remediación (actualizado 2026-07-19)
+
+Remediación ejecutada por Claude Fable 5. Suite completa en verde (**243 tests**), ruff y
+`compliance_check.py` OK. Resumen por hallazgo:
+
+| Estado | Hallazgos |
+|---|---|
+| ✅ **Arreglado (código + tests)** | SEC-01, BUG-01, SEC-05, TEST-01, BUG-02, BUG-03, BUG-06, SEC-03, SEC-06, SEC-07, SEC-08, BUG-04, SEC-09, SEC-10, SEC-12, BUG-07, BUG-08, BUG-09, CMP-06 |
+| ✅ **Arreglado (documental)** | CMP-01, CMP-02, CMP-05, SEC-04(b) — RAT/DPIA actualizados |
+| ⏸️ **Diferido — requiere decisión humana / riesgo** | SEC-04(a) activar RLS (cambia rol de conexión: OK humano + pruebas), OPS-01 monitorización del backup (operativo), CMP-03/CMP-04 (criterio laboralista/DPO), SEC-02 rate-limiting (se cubre en Fase 3 con Cloudflare), SEC-11 (`--forwarded-allow-ips`: no tocar sin los rangos reales del proxy, Fase 3), BUG-05 (optimización O(N): se omite para no arriesgar el cómputo en fronteras de año) |
+
+Los diferidos están registrados en `docs/DEFERRED.md`. Lo que sigue es el informe original.
+
+---
+
+
 > **Para Claude Fable 5.** Este documento es una lista de trabajo, no una verdad establecida.
 > Cada hallazgo lo produjo una auditoría (código, seguridad, compliance) sobre el estado del
 > repo el 2026-07-18. Antes de tocar nada:

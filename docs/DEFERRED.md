@@ -34,6 +34,27 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   es constante en código; debería poder editarse como config del convenio.
 - **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
   justificantes subidos no se escanean ni tienen política de borrado documentada.
+- **SEC-04(a): activar la RLS en runtime (auditoría 2026-07)** — las políticas RLS están
+  escritas pero no se evalúan (la app conecta como superusuario). Activarlas exige conectar con
+  un rol NO superusuario + inyectar claims por transacción (`SET LOCAL request.jwt.claims`) y
+  probar a fondo que ningún flujo legítimo (admin/oversight, jobs, backup) se rompe. Alto riesgo
+  de implementación → requiere OK humano. Mientras tanto, RAT/DPIA ya NO presentan la RLS como
+  salvaguarda activa (SEC-04(b) hecho).
+- **OPS-01: monitorización del backup diario (auditoría 2026-07)** — la conservación de 4 años
+  depende del cron a R2; falta una alerta si un día no aparece backup nuevo (o el objeto más
+  reciente supera ~26 h). Operativo, no código de la app. Alternativa: subir a Supabase Pro.
+- **BUG-05: escaneos O(N) del histórico por fichaje (auditoría 2026-07)** — `_alert_if_annual_cap`
+  y `annual_status` cargan todos los `time_record`. Optimización pendiente (acotar por ventana),
+  omitida ahora para no arriesgar el cómputo en jornadas que cruzan la frontera de año.
+- **SEC-11: `--forwarded-allow-ips '*'` en railway.json (auditoría 2026-07)** — confía XFF de
+  cualquier upstream (envenenamiento de logs). No se fija a rangos concretos porque el proxy de
+  Railway no expone IP estable; se revisa en la Fase 3 (Cloudflare) junto con `TRUST_CF_CONNECTING_IP`.
+- **CMP-03: art. 35.5, resumen entregable + flag abono/descanso (auditoría 2026-07)** — la
+  totalización existe; falta resolver `compensacion` (hoy "pending") e incluirlo en el export, y
+  valorar un artefacto de "resumen entregado". Requiere criterio de negocio/convenio.
+- **CMP-04: borrado tras los 4 años vs derecho de supresión (auditoría 2026-07)** — hoy nada
+  borra tras la retención (tensión con art. 5.1.e). Decisión de política con DPO/laboralista,
+  y su interacción con la inmutabilidad (borrado físico controlado vs anonimización).
 - **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
   producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
   Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en
