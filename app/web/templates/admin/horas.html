@@ -29,7 +29,7 @@
       {{ report.start.strftime("%d/%m/%Y") }} – {{ report.end.strftime("%d/%m/%Y") }}
       · relación: {{ worker.relation_type }}
     </p>
-    <table>
+    <div class="table-scroll"><table>
       <tbody>
         <tr><th>Tiempo efectivo</th><td>{{ report.efectivo_min // 60 }}h {{ report.efectivo_min % 60 }}m</td></tr>
         <tr><th>Jornada ordinaria del periodo</th><td>{{ report.ordinary_min // 60 }}h {{ report.ordinary_min % 60 }}m</td></tr>
@@ -37,13 +37,13 @@
         <tr><th>Extra</th><td>{{ report.extra_min // 60 }}h {{ report.extra_min % 60 }}m</td></tr>
         <tr><th>Complementarias</th><td>{{ report.complementarias_min // 60 }}h {{ report.complementarias_min % 60 }}m</td></tr>
       </tbody>
-    </table>
+    </table></div>
   </div>
   {% if annual %}
     <div class="card">
       <h2>Tope anual de jornada {{ annual.year }} (REQ-27)</h2>
       {% if annual.flexible %}<p class="muted">Horario flexible.</p>{% endif %}
-      <table>
+      <div class="table-scroll"><table>
         <tbody>
           <tr><th>Trabajado en el año</th><td>{{ annual.worked_min // 60 }}h {{ annual.worked_min % 60 }}m</td></tr>
           <tr><th>Tope anual</th><td>{{ annual.cap_min // 60 }}h {{ annual.cap_min % 60 }}m</td></tr>
@@ -53,7 +53,7 @@
               {% if annual.exceeded %}(tope superado){% elif annual.near %}(cerca del tope){% endif %}
             </td></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   {% endif %}
 {% elif selected %}

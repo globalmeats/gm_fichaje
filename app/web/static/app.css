@@ -45,10 +45,12 @@
 
 *{ box-sizing:border-box; }
 
+html{ overflow-x:hidden; }  /* guarda dura: el body nunca desplaza en horizontal (SEC UI) */
+
 body{
   font-family:var(--font-sans); font-size:16px; line-height:1.5;
   margin:0; color:var(--ink); background:var(--paper);
-  -webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
 }
 
 /* ---- Cabecera (barra documento) ---- */
@@ -132,6 +134,22 @@ tbody tr:hover{ background:var(--paper-2); }
 /* Horas y cifras de registro en mono (voz "trazabilidad"). */
 td:last-child, td.mono, .num{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 
+/* Tablas densas (7-9 columnas): scroll CONTENIDO en su envoltura, nunca en el body.
+   El .table-scroll envuelve cada <table>; en móvil las celdas no se parten y el contenedor
+   desplaza en horizontal si hace falta, con una pista visual de sombra en el borde. */
+.table-scroll{
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+  /* Sombras de affordance: aparecen solo cuando hay contenido oculto a los lados. */
+  background:
+    linear-gradient(to right, var(--white) 30%, rgba(255,255,255,0)) left/24px 100% no-repeat,
+    linear-gradient(to left, var(--white) 30%, rgba(255,255,255,0)) right/24px 100% no-repeat,
+    linear-gradient(to right, rgba(38,38,43,.08), rgba(255,255,255,0)) left/12px 100% no-repeat,
+    linear-gradient(to left, rgba(38,38,43,.08), rgba(255,255,255,0)) right/12px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+.table-scroll table{ margin:0; }
+.table-scroll th, .table-scroll td{ white-space:nowrap; }
+
 /* ---- Texto auxiliar y estados ---- */
 .muted{ color:var(--slate); font-size:.9rem; }
 .error{ color:var(--seal-deep); font-weight:600; }
@@ -176,17 +194,34 @@ td:last-child, td.mono, .num{ font-family:var(--font-mono); font-variant-numeric
 /* ---- Alpine: oculta hasta inicializar ---- */
 [x-cloak]{ display:none !important; }
 
-/* ---- Responsive ---- */
-@media (max-width:560px){
-  main{ margin:1rem auto; }
-  h1{ font-size:1.55rem; }
+/* ---- Responsive (móvil-first en los ajustes: base ya vale a 360px) ---- */
+
+/* Móvil (hasta 600px) */
+@media (max-width:600px){
+  main{ margin:1rem auto; padding:0 .8rem; }
+  h1{ font-size:1.5rem; }
+  .card{ padding:1rem 1.05rem; }
   input, select, textarea{ max-width:100%; }
   /* El fichaje es la acción principal: botones cómodos y a lo ancho en móvil. */
   #estado > div button{ display:block; width:100%; margin:.3rem 0; min-height:52px;
     font-size:1.05rem; }
-  header{ padding:.7rem .9rem; }
-  header a{ margin-left:0; margin-right:1rem; }
+  /* Cabecera: wordmark arriba, navegación debajo. El nav ocupa el ancho completo para que
+     envuelva dentro del viewport (en columna, sin width tomaría su ancho de contenido y
+     empujaría el ancho de toda la página). */
+  header{ padding:.7rem .9rem; flex-direction:column; align-items:stretch; gap:.5rem; }
+  header nav{ width:100%; gap:.15rem .9rem; }
+  header a{ margin-left:0; padding:.35rem 0; }
+  th, td{ padding:.45rem .55rem; font-size:.88rem; }
+  /* Las filas de filtros/campos apilan en vertical. */
+  .card form > div[style*="flex"]{ flex-direction:column; align-items:stretch !important; }
 }
+
+/* Tablet (600–899px): ancho fluido con margen cómodo. */
+@media (min-width:600px) and (max-width:899px){
+  main{ max-width:100%; padding:0 1.25rem; }
+}
+
+/* Escritorio (≥900px): el ancho de lectura fijado en `main`. */
 
 @media (prefers-reduced-motion:reduce){
   *{ transition:none !important; animation:none !important; }

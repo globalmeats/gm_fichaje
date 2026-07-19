@@ -53,7 +53,7 @@
 
   <h3>Eventos de hoy</h3>
   {% if events %}
-    <table>
+    <div class="table-scroll"><table>
       <thead><tr><th>#</th><th>Evento</th><th>Hora (Madrid)</th></tr></thead>
       <tbody>
         {% for e in events %}
@@ -64,14 +64,14 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   {% else %}
     <p class="muted">Aún no has fichado hoy.</p>
   {% endif %}
 
   {% if journeys %}
     <h3>Tiempo efectivo de hoy</h3>
-    <table>
+    <div class="table-scroll"><table>
       <thead>
         <tr><th>Entrada</th><th>Salida</th><th>Bruto</th><th>Pausa</th>
             <th>Despl. no computa</th><th>Efectivo</th></tr>
@@ -88,6 +88,6 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   {% endif %}
 </div>

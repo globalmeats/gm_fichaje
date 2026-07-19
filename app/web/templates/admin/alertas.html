@@ -28,7 +28,7 @@
 
 <div class="card">
   {% if alerts %}
-    <table>
+    <div class="table-scroll"><table>
       <thead>
         <tr>
           <th>Fecha (UTC)</th>
@@ -51,7 +51,7 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   {% else %}
     <p class="muted">No hay alertas registradas.</p>
   {% endif %}

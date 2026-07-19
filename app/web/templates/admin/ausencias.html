@@ -79,7 +79,7 @@
   </form>
 
   {% if rows %}
-    <table style="margin-top:1rem">
+    <div class="table-scroll"><table style="margin-top:1rem">
       <thead>
         <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
           <th>Estado</th><th>Justif.</th><th>Acciones</th></tr>
@@ -115,7 +115,7 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   {% else %}
     <p class="muted" style="margin-top:1rem">No hay ausencias registradas.</p>
   {% endif %}

@@ -10,20 +10,20 @@
     <p class="muted">
       {{ report.start.strftime("%d/%m/%Y") }} – {{ report.end.strftime("%d/%m/%Y") }}
     </p>
-    <table>
+    <div class="table-scroll"><table>
       <tbody>
         <tr><th>Tiempo efectivo</th><td>{{ report.efectivo_min // 60 }}h {{ report.efectivo_min % 60 }}m</td></tr>
         <tr><th>Ordinarias</th><td>{{ report.ordinarias_min // 60 }}h {{ report.ordinarias_min % 60 }}m</td></tr>
         <tr><th>Extra</th><td>{{ report.extra_min // 60 }}h {{ report.extra_min % 60 }}m</td></tr>
         <tr><th>Complementarias</th><td>{{ report.complementarias_min // 60 }}h {{ report.complementarias_min % 60 }}m</td></tr>
       </tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="card">
     <h2>Detalle</h2>
     {% if report.records %}
-      <table>
+      <div class="table-scroll"><table>
         <thead>
           <tr><th>#</th><th>Evento</th><th>Hora (Madrid)</th><th>Modalidad</th>
               <th>Origen</th><th>Geo</th>{% if can_correct %}<th>Acción</th>{% endif %}</tr>
@@ -136,7 +136,7 @@
             {% endfor %}
           </tbody>
         {% endfor %}
-      </table>
+      </table></div>
     {% else %}
       <p class="muted">No hay registros en el rango seleccionado.</p>
     {% endif %}

@@ -6,13 +6,13 @@
 
 <div class="card">
   <h2>Saldo de vacaciones {{ balance.year }}</h2>
-  <table>
+  <div class="table-scroll"><table>
     <tbody>
       <tr><th>Días anuales</th><td>{{ "%.1f"|format(balance.entitled) }}</td></tr>
       <tr><th>Disfrutados</th><td>{{ balance.taken }}</td></tr>
       <tr><th>Restantes</th><td><strong>{{ "%.1f"|format(balance.remaining) }}</strong></td></tr>
     </tbody>
-  </table>
+  </table></div>
 </div>
 
 <div class="card">
@@ -20,7 +20,7 @@
   {% if annual.flexible %}
     <p class="muted">Horario flexible: el cómputo se reparte en el periodo pactado.</p>
   {% endif %}
-  <table>
+  <div class="table-scroll"><table>
     <tbody>
       <tr><th>Trabajado</th><td>{{ annual.worked_min // 60 }}h {{ annual.worked_min % 60 }}m</td></tr>
       <tr><th>Tope</th><td>{{ annual.cap_min // 60 }}h {{ annual.cap_min % 60 }}m</td></tr>
@@ -30,13 +30,13 @@
           {% if annual.exceeded %}(tope superado){% elif annual.near %}(cerca del tope){% endif %}
         </td></tr>
     </tbody>
-  </table>
+  </table></div>
 </div>
 
 <div class="card">
   <h2>Mis ausencias registradas</h2>
   {% if rows %}
-    <table>
+    <div class="table-scroll"><table>
       <thead>
         <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
           <th>Estado</th><th>Justif.</th></tr>
@@ -59,7 +59,7 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   {% else %}
     <p class="muted">No tienes ausencias registradas.</p>
   {% endif %}
