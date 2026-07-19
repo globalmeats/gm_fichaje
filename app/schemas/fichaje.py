@@ -39,7 +39,10 @@ class OfflineEventRequest(BaseModel):
         "check_in", "check_out", "break_start", "break_end", "travel_start", "travel_end"
     ]
     occurred_at: datetime
-    client_event_id: str = Field(..., min_length=1, max_length=200)
+    # CMP-06: charset acotado (alfanumérico, guion y dos puntos). El `client_event_id` entra en
+    # el payload canónico del sellado (separado por '|'); restringirlo impide inyectar el
+    # separador o ambigüedades en el hash, sin cambiar el formato del payload.
+    client_event_id: str = Field(..., min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.\-:]+$")
     modalidad: Literal["presencial", "teletrabajo", "movil"] = "presencial"
     travel_computes: bool = True
     geo: str | None = None

@@ -33,7 +33,8 @@ def test_is_retained_recent_true():
 
 def test_is_retained_old_false():
     now = utc_now()
-    over_four = now - timedelta(days=365 * RETENTION_YEARS + 1)
+    # Con años de calendario (BUG-08), algo más de 4 años + margen cae fuera de retención.
+    over_four = now - timedelta(days=365 * RETENTION_YEARS + 10)
     assert is_retained(over_four, now) is False
 
 

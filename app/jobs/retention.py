@@ -15,7 +15,7 @@ Ejecutable como cron:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -30,8 +30,15 @@ RETENTION_YEARS = 4
 
 
 def retention_cutoff(now: datetime) -> datetime:
-    """Frontera de retención: registros con `occurred_at` anterior a esto cruzan los 4 años."""
-    return now - timedelta(days=365 * RETENTION_YEARS)
+    """Frontera de retención: registros con `occurred_at` anterior a esto cruzan los 4 años.
+
+    Resta años de CALENDARIO (no 365·4 días) para no adelantar la elegibilidad ~1 día por los
+    bisiestos (BUG-08). El 29-feb se ajusta al 28-feb del año destino.
+    """
+    try:
+        return now.replace(year=now.year - RETENTION_YEARS)
+    except ValueError:  # 29-feb en un año destino no bisiesto
+        return now.replace(year=now.year - RETENTION_YEARS, day=28)
 
 
 def is_retained(occurred_at: datetime, now: datetime) -> bool:

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
 from app.db.models import Worker
-from app.db.session import get_session
+from app.db.session import SessionLocal
 
 _bearer = HTTPBearer(auto_error=True)
 
@@ -22,7 +22,8 @@ _INVALID_SESSION = HTTPException(
 
 
 async def get_db() -> AsyncSession:
-    async for s in get_session():
+    """Cede una sesión async y la cierra de forma determinista al terminar (BUG-09)."""
+    async with SessionLocal() as s:
         yield s
 
 

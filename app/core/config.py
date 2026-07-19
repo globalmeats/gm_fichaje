@@ -37,6 +37,10 @@ class InsecureDefaultSecretError(RuntimeError):
     """Se lanza cuando un secreto crítico conserva su valor por defecto en prod (B1)."""
 
 
+class DatabaseTLSError(RuntimeError):
+    """Se lanza cuando la conexión a la BD no fuerza TLS y se exige (SEC-12 / REQ-23)."""
+
+
 # Valores por defecto SOLO para desarrollo. Son la única fuente de verdad: se usan como
 # `default=` de los campos y como referencia para detectarlos en producción.
 DEV_JWT_SECRET = "change-me-in-production"
@@ -119,6 +123,15 @@ def assert_eu_region(s: Settings = settings) -> None:
             "Residencia de datos fuera de la UE (REQ-23). Regiones no válidas: "
             + ", ".join(offenders)
             + ". Los datos personales deben permanecer en servidores de la UE."
+        )
+
+
+def assert_db_tls(s: Settings = settings) -> None:
+    """Aborta el arranque si se exige TLS a la BD pero la URL no lo fuerza (SEC-12/REQ-23)."""
+    if not db_uses_tls(s):
+        raise DatabaseTLSError(
+            "La conexión a la base de datos no fuerza TLS (REQ-23). Añade ssl=require a "
+            "DATABASE_URL, o desactiva DB_REQUIRE_TLS solo en desarrollo."
         )
 
 

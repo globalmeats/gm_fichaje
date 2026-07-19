@@ -11,13 +11,14 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.api.export import OVERSIGHT_ROLES
 from app.core.crypto import decrypt_blob, encrypt_blob
 from app.core.time import utc_now
+from app.core.uploads import content_disposition, sniff_matches
 from app.db.models import (
     JUSTIFICANTE_CONTENT_TYPES,
     MAX_JUSTIFICANTE_BYTES,
@@ -103,6 +104,13 @@ async def create_absence(
     worker = await db.get(Worker, body.worker_id)
     if worker is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador no existe.")
+
+    # BUG-07: serializa las altas del mismo trabajador para que el chequeo de solape
+    # (leer-comprobar-insertar) sea atómico frente a dos altas concurrentes.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+        {"k": f"absence:{body.worker_id}"},
+    )
 
     existing = (
         await db.execute(select(Absence).where(Absence.worker_id == body.worker_id))
@@ -198,6 +206,12 @@ async def upload_justificante(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="El justificante está vacío o supera el tamaño máximo (5 MB).",
         )
+    # SEC-10: el tipo real (bytes mágicos) debe coincidir con el declarado.
+    if not sniff_matches(file.content_type, data):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El contenido del fichero no coincide con su tipo declarado.",
+        )
 
     doc = AbsenceDocument(
         absence_id=absence_id,
@@ -241,7 +255,7 @@ async def download_justificante(
     return Response(
         content=content,
         media_type=doc.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
+        headers={"Content-Disposition": content_disposition(doc.filename)},
     )
 
 

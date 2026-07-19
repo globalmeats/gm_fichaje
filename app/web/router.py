@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.absences import vacation_balance_for
@@ -32,6 +32,7 @@ from app.core.crypto import decrypt_blob, encrypt_blob
 from app.core.logging import client_ip, log_event
 from app.core.security import create_access_token, generate_pin, hash_pin
 from app.core.time import madrid_today_start, utc_now
+from app.core.uploads import content_disposition, sniff_matches
 from app.db.models import (
     ABSENCE_TYPES,
     COMPUTATION_PERIODS,
@@ -778,6 +779,11 @@ async def admin_ausencias_crear(
         body = None
 
     if body is not None:
+        # BUG-07: serializa las altas del mismo trabajador (chequeo de solape atómico).
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"absence:{body.worker_id}"},
+        )
         existing = (
             await db.execute(select(Absence).where(Absence.worker_id == body.worker_id))
         ).scalars().all()
@@ -854,6 +860,8 @@ async def admin_ausencias_justificante(
         data = await file.read()
         if not data or len(data) > MAX_JUSTIFICANTE_BYTES:
             error = "El justificante está vacío o supera el tamaño máximo (5 MB)."
+        elif not sniff_matches(file.content_type, data):
+            error = "El contenido del fichero no coincide con su tipo declarado."
         else:
             db.add(
                 AbsenceDocument(
@@ -908,7 +916,7 @@ async def descargar_justificante(
     return Response(
         content=decrypt_blob(doc.content_encrypted),
         media_type=doc.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
+        headers={"Content-Disposition": content_disposition(doc.filename)},
     )
 
 

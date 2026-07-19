@@ -8,14 +8,15 @@ export y portal (API JSON) y el router web SSR (Fase 7) con sus estáticos vendo
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import absences, admin, auth, corrections, export, fichaje, portal, reports
 from app.api.export import OVERSIGHT_ROLES
-from app.core.config import assert_eu_region, assert_secure_secrets
+from app.core.config import assert_db_tls, assert_eu_region, assert_secure_secrets
 from app.core.logging import setup_logging
 from app.web import STATIC_DIR, templates
 from app.web import router as web
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     assert_eu_region()
     # B1: no arrancar en prod/staging con secretos por defecto de desarrollo.
     assert_secure_secrets()
+    # SEC-12: no arrancar si se exige TLS a la BD pero la URL no lo fuerza.
+    assert_db_tls()
     # R3: eventos de seguridad como JSON a stdout (los captura Railway).
     setup_logging()
     yield
@@ -54,8 +57,23 @@ _SECURITY_HEADERS = {
 }
 
 
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
 @app.middleware("http")
 async def _security_headers(request: Request, call_next):
+    # SEC-09: defensa CSRF complementaria a SameSite. En métodos que mutan estado, si el
+    # navegador manda cabecera Origin, su host debe coincidir con el Host de la petición;
+    # un Origin cruzado se rechaza. Sin Origin (clientes API con Bearer) no se aplica.
+    if request.method in _UNSAFE_METHODS:
+        origin = request.headers.get("origin")
+        if origin:
+            host = request.headers.get("host", "")
+            origin_host = urlsplit(origin).netloc
+            if origin_host and host and origin_host != host:
+                return JSONResponse(
+                    status_code=403, content={"detail": "Origen no permitido (CSRF)."}
+                )
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
