@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
@@ -25,6 +25,7 @@ from app.domain.absences import vacation_balance, vacation_days_taken
 from app.domain.desconexion import is_off_hours
 from app.domain.hours import (
     annual_status,
+    annual_window,
     journey_effective,
     period_summary,
     reconstruct_journeys,
@@ -84,14 +85,19 @@ async def _alert_if_annual_cap(db: AsyncSession, worker: Worker | None) -> None:
     policy = await db.get(TimePolicy, 1)
     if policy is None:
         return
+    now = utc_now()
+    # BUG-05: solo el año natural en curso influye en el tope anual. Acotamos la consulta a
+    # `occurred_at >= inicio del año` (frontera Madrid→UTC): las jornadas con check_in en el año
+    # se capturan enteras y las que cruzan el 31-dic pertenecen al año anterior (no cuentan aquí),
+    # así que `annual_status` da el mismo resultado que cargando todo el histórico.
+    year_start, _ = annual_window(now)
     records = (
         await db.execute(
             select(TimeRecord)
-            .where(TimeRecord.worker_id == worker.id)
+            .where(TimeRecord.worker_id == worker.id, TimeRecord.occurred_at >= year_start)
             .order_by(TimeRecord.seq.asc())
         )
     ).scalars().all()
-    now = utc_now()
     status_ = annual_status(list(records), worker, policy, now)
     if not (status_["exceeded"] or status_["near"]):
         return
@@ -122,10 +128,24 @@ async def _alert_if_annual_cap(db: AsyncSession, worker: Worker | None) -> None:
 
 
 async def _ordered_event_types(db: AsyncSession, worker_id: uuid.UUID) -> list[str]:
+    """Eventos (en orden de seq) de la jornada ABIERTA actual, para reconstruir el estado.
+
+    Optimización (BUG-05): el estado solo depende de los eventos posteriores al último
+    `check_out` (cada check_out devuelve a IDLE). Acotamos la consulta a `seq` > el del último
+    check_out en vez de cargar todo el histórico; el estado reconstruido es idéntico.
+    """
+    last_checkout = (
+        select(func.max(TimeRecord.seq))
+        .where(TimeRecord.worker_id == worker_id, TimeRecord.event_type == "check_out")
+        .scalar_subquery()
+    )
     rows = (
         await db.execute(
             select(TimeRecord.event_type)
-            .where(TimeRecord.worker_id == worker_id)
+            .where(
+                TimeRecord.worker_id == worker_id,
+                TimeRecord.seq > func.coalesce(last_checkout, 0),
+            )
             .order_by(TimeRecord.seq.asc())
         )
     ).all()
