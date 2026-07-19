@@ -35,9 +35,10 @@ def _day(month: int, day: int, h: int) -> datetime:
 
 
 def test_annual_window_is_calendar_year():
+    # 1 de enero a medianoche de Madrid (invierno = UTC+1 → 23:00 UTC del 31 dic) (BUG-02).
     start, end = annual_window(_day(6, 24, 10))
-    assert start == datetime(2026, 1, 1, tzinfo=UTC)
-    assert end == datetime(2027, 1, 1, tzinfo=UTC)
+    assert start == datetime(2025, 12, 31, 23, tzinfo=UTC)
+    assert end == datetime(2026, 12, 31, 23, tzinfo=UTC)
 
 
 def test_annual_worked_only_counts_this_year_closed_journeys():

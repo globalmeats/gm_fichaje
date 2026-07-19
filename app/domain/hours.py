@@ -17,9 +17,10 @@ costura para un override por-evento futuro sin tocar el sellado.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Protocol
 
+from app.core.time import add_months, madrid_date, madrid_midnight_utc
 from app.domain.schedule import effective_annual_cap
 
 # Umbral de aviso del tope anual: a partir de este ratio de consumo se considera "cerca".
@@ -126,21 +127,16 @@ def journey_effective(journey: Journey, policy: _Policy) -> timedelta:
 
 
 def period_window(now: datetime, period: str) -> tuple[datetime, datetime]:
-    """Ventana [inicio, fin) natural en UTC para el periodo de cómputo (REQ-12)."""
-    now = now.astimezone(UTC)
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    """Ventana [inicio, fin) del periodo de cómputo (REQ-12), en fronteras de Madrid → UTC."""
+    d = madrid_date(now)
     if period == "daily":
-        return day_start, day_start + timedelta(days=1)
+        return madrid_midnight_utc(d), madrid_midnight_utc(d + timedelta(days=1))
     if period == "weekly":
-        start = day_start - timedelta(days=now.weekday())  # lunes
-        return start, start + timedelta(days=7)
+        monday = d - timedelta(days=d.weekday())
+        return madrid_midnight_utc(monday), madrid_midnight_utc(monday + timedelta(days=7))
     # monthly (default)
-    start = day_start.replace(day=1)
-    if start.month == 12:
-        end = start.replace(year=start.year + 1, month=1)
-    else:
-        end = start.replace(month=start.month + 1)
-    return start, end
+    first = d.replace(day=1)
+    return madrid_midnight_utc(first), madrid_midnight_utc(add_months(first, 1))
 
 
 def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> dict:
@@ -159,11 +155,9 @@ def period_summary(records: list[_Record], policy: _Policy, now: datetime) -> di
 
 
 def annual_window(now: datetime) -> tuple[datetime, datetime]:
-    """Ventana [1 ene, 1 ene del año siguiente) en UTC para el cómputo anual (REQ-27)."""
-    now = now.astimezone(UTC)
-    start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = start.replace(year=start.year + 1)
-    return start, end
+    """Ventana [1 ene, 1 ene del año siguiente) para el cómputo anual (REQ-27), Madrid → UTC."""
+    year = madrid_date(now).year
+    return madrid_midnight_utc(date(year, 1, 1)), madrid_midnight_utc(date(year + 1, 1, 1))
 
 
 def annual_worked(records: list[_Record], policy: _Policy, now: datetime) -> timedelta:

@@ -12,8 +12,10 @@ configura ventana (ambos NULL), no hay control de desconexión y nada se conside
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, time
+from datetime import datetime, time
 from typing import Protocol
+
+from app.core.time import to_madrid
 
 
 class _Policy(Protocol):
@@ -25,13 +27,14 @@ def is_off_hours(dt: datetime, policy: _Policy) -> bool:
     """True si `dt` cae FUERA de la ventana laboral configurada (REQ-26).
 
     Devuelve False si la ventana no está configurada (sin control de desconexión). Soporta
-    ventanas que cruzan medianoche. Se compara en hora UTC (coherente con el sellado).
+    ventanas que cruzan medianoche. La ventana la introduce el admin en hora LOCAL de Madrid,
+    así que la comparación se hace en hora de Madrid (BUG-03), no en UTC.
     """
     start = policy.desconexion_start
     end = policy.desconexion_end
     if start is None or end is None:
         return False
-    now_t = dt.astimezone(UTC).time()
+    now_t = to_madrid(dt).time()
     if start <= end:
         # Ventana normal dentro del mismo día: dentro si start <= t < end.
         within = start <= now_t < end

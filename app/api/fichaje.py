@@ -19,7 +19,7 @@ from app.audit.alerts import record_alert
 from app.audit.chain import append_event
 from app.core.config import settings
 from app.core.crypto import encrypt_geo
-from app.core.time import iso8601, utc_now
+from app.core.time import iso8601, madrid_today_start, utc_now
 from app.db.models import Absence, AuditAlert, TimePolicy, TimeRecord, Worker
 from app.domain.absences import vacation_balance, vacation_days_taken
 from app.domain.desconexion import is_off_hours
@@ -280,7 +280,7 @@ async def today(
     # Lectura defensiva: nunca 500 aunque el histórico llegara a ser incoherente (BUG-01).
     state = reconstruct_state(await _ordered_event_types(db, worker_id), strict=False)
 
-    day_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = madrid_today_start(utc_now())  # "hoy" = día local de Madrid (BUG-02)
     rows = (
         await db.execute(
             select(TimeRecord)
@@ -323,7 +323,7 @@ async def summary(
     ).scalars().all()
 
     now = utc_now()
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = madrid_today_start(now)  # "hoy" = día local de Madrid (BUG-02)
 
     today_journeys: list[JourneySummary] = []
     for j in reconstruct_journeys(records):

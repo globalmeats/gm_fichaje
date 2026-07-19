@@ -49,10 +49,11 @@ def test_off_hours_false_when_no_window():
 
 
 def test_off_hours_within_normal_window():
+    # Ventana 08:00–20:00 en hora de Madrid (BUG-03: la comparación es local, no UTC).
     p = _Policy(desconexion_start=time(8), desconexion_end=time(20))
-    assert is_off_hours(_at(10), p) is False  # dentro de la jornada
-    assert is_off_hours(_at(22), p) is True   # de noche, fuera
-    assert is_off_hours(_at(6), p) is True    # de madrugada, fuera
+    assert is_off_hours(_at(10), p) is False  # 12:00 Madrid, dentro de la jornada
+    assert is_off_hours(_at(22), p) is True   # 00:00 Madrid, de noche, fuera
+    assert is_off_hours(_at(3), p) is True    # 05:00 Madrid, de madrugada, fuera
 
 
 def test_off_hours_window_crossing_midnight():

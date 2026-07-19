@@ -31,7 +31,7 @@ from app.audit.verify import verify_all
 from app.core.crypto import decrypt_blob, encrypt_blob
 from app.core.logging import client_ip, log_event
 from app.core.security import create_access_token, generate_pin, hash_pin
-from app.core.time import utc_now
+from app.core.time import madrid_today_start, utc_now
 from app.db.models import (
     ABSENCE_TYPES,
     COMPUTATION_PERIODS,
@@ -143,7 +143,7 @@ async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
     # Lectura defensiva: nunca 500 aunque el histórico llegara a ser incoherente (BUG-01).
     state = reconstruct_state(await _ordered_event_types(db, worker_id), strict=False)
 
-    day_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = madrid_today_start(utc_now())  # "hoy" = día local de Madrid (BUG-02)
     events = (
         await db.execute(
             select(TimeRecord)

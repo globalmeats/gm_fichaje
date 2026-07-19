@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.core.time import utc_now
-from app.db.models import TimePolicy, TimeRecord
+from app.db.models import TimePolicy, TimeRecord, Worker
 from app.domain.hours import classify_overtime
 from app.schemas.report import OvertimeReport
 
@@ -55,6 +55,8 @@ async def overtime(
         datetime(date.year, date.month, date.day, tzinfo=UTC) if date else utc_now()
     )
 
+    worker = await db.get(Worker, target)
+
     records = (
         await db.execute(
             select(TimeRecord)
@@ -63,7 +65,10 @@ async def overtime(
         )
     ).scalars().all()
 
-    out = classify_overtime(records, policy, reference)
+    # BUG-06: pasar relation_type para clasificar el exceso de un tiempo parcial como
+    # complementarias (no extra), coherente con el export.
+    relation_type = worker.relation_type if worker is not None else "ordinaria"
+    out = classify_overtime(records, policy, reference, relation_type=relation_type)
     return OvertimeReport(
         worker_id=target,
         period=out["period"],
@@ -72,5 +77,6 @@ async def overtime(
         efectivo_min=_minutes(out["efectivo"]),
         ordinarias_min=_minutes(out["ordinarias"]),
         extra_min=_minutes(out["extra"]),
+        complementarias_min=_minutes(out["complementarias"]),
         ordinary_min=_minutes(out["ordinary"]),
     )

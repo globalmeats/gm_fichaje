@@ -113,16 +113,17 @@ def test_split_shift_is_two_journeys():
 
 
 def test_period_window_monthly():
+    # Fronteras en medianoche de Madrid (verano = UTC+2 → 22:00 UTC del día anterior) (BUG-02).
     start, end = period_window(_at(10), "monthly")
-    assert start == datetime(2026, 6, 1, tzinfo=UTC)
-    assert end == datetime(2026, 7, 1, tzinfo=UTC)
+    assert start == datetime(2026, 5, 31, 22, tzinfo=UTC)
+    assert end == datetime(2026, 6, 30, 22, tzinfo=UTC)
 
 
 def test_period_window_weekly_starts_monday():
-    # 2026-06-24 es miércoles → la semana empieza el lunes 22.
+    # 2026-06-24 es miércoles → la semana empieza el lunes 22 (medianoche de Madrid).
     start, end = period_window(_at(10), "weekly")
-    assert start == datetime(2026, 6, 22, tzinfo=UTC)
-    assert end == datetime(2026, 6, 29, tzinfo=UTC)
+    assert start == datetime(2026, 6, 21, 22, tzinfo=UTC)
+    assert end == datetime(2026, 6, 28, 22, tzinfo=UTC)
 
 
 def test_period_summary_sums_closed_journeys():

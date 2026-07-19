@@ -22,5 +22,6 @@ class OvertimeReport(BaseModel):
     efectivo_min: int
     ordinarias_min: int
     extra_min: int
+    complementarias_min: int = 0
     ordinary_min: int
     compensacion: str = "pending"
