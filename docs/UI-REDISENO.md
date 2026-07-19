@@ -1,6 +1,14 @@
 # Rediseño de UI — "Documento de origen" (solo CSS/diseño)
 
-> **Tarea pendiente, post-go-live.** Reestilizado de la interfaz de `fichajes.globalmeats.es`
+> **Estado (2026-07-19): IMPLEMENTADO.** Sistema de diseño aplicado en
+> `app/web/static/app.css` (tokens + base + componentes), fuentes self-hosted en
+> `app/web/static/fonts/` (CSP intacta, sin CDN externo), y `base.html` enlaza el CSS
+> (retirado el `<style>` inline antiguo). Enhancements de clase en `login`, `fichar`/`_estado`
+> y tarjetas de estado admin. **243 tests en verde sin modificar ningún test**; cero cambios de
+> backend/JS/textos. Verificado visualmente (login, fichar, alta) con capturas headless. Queda
+> como iteración futura opcional pulir pantalla por pantalla los formularios admin más densos.
+
+> Reestilizado de la interfaz de `fichajes.globalmeats.es`
 > para alinearla con el sistema de diseño corporativo de GlobalMeats. **Solo CSS/diseño: NO
 > cambia el comportamiento de la app.** Registrada aquí para abordarla en una sesión dedicada,
 > siguiendo el proceso por pasos con aprobación explícita entre cada uno.

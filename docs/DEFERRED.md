@@ -77,9 +77,10 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
 - **CMP-04: borrado tras los 4 años vs derecho de supresión (auditoría 2026-07)** — hoy nada
   borra tras la retención (tensión con art. 5.1.e). Decisión de política con DPO/laboralista,
   y su interacción con la inmutabilidad (borrado físico controlado vs anonimización).
-- **Rediseño de UI "Documento de origen" (post-go-live)** — reestilizado completo de la interfaz
-  al sistema de diseño corporativo de GlobalMeats. SOLO CSS/diseño, sin cambiar comportamiento.
-  Prompt y proceso por pasos en `docs/UI-REDISENO.md`. Abordar en sesión dedicada tras el go-live.
+- ~~**Rediseño de UI "Documento de origen"**~~ **IMPLEMENTADO (2026-07-19)**: sistema de diseño
+  en `app/web/static/app.css` + fuentes self-hosted, `base.html` enlaza el CSS. Sin cambios de
+  comportamiento (243 tests verde). Detalle en `docs/UI-REDISENO.md`. Pendiente opcional: pulir
+  pantalla por pantalla los formularios admin más densos.
 - **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
   producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
   Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en

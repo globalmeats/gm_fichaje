@@ -4,7 +4,7 @@
 <h1>Alertas de auditoría</h1>
 
 {% if verify %}
-  <div class="card" style="border-color:{{ '#1d6f42' if not verify.broken else '#c00' }}">
+  <div class="card {{ 'card-ok' if not verify.broken else 'card-bad' }}">
     <h2>Verificación de cadena</h2>
     <p>Trabajadores comprobados: <strong>{{ verify.checked }}</strong></p>
     {% if verify.broken %}

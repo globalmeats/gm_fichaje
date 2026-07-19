@@ -4,7 +4,7 @@
 <h1>Exportar registros</h1>
 {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 {% if reset %}
-  <div class="card" style="border-color:#cc0; background:#fffae6">
+  <div class="card card-highlight">
     <h2>PIN restablecido</h2>
     <p>{{ reset.employee_code }} — nuevo PIN (una sola vez):</p>
     <p class="pin-box">{{ reset.pin }}</p>

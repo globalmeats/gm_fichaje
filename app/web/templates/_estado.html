@@ -18,14 +18,18 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 
-  <h2>Estado: <span class="pill">{{ state_labels.get(state, state) }}</span></h2>
+  {% set state_pill = {"ABIERTA": "pill-warn", "EN_PAUSA": "pill-warn",
+                       "EN_DESPLAZAMIENTO": "pill-warn"} %}
+  <h2>Estado:
+    <span class="pill {{ state_pill.get(state, '') }}">{{ state_labels.get(state, state) }}</span>
+  </h2>
 
   {% if since %}
     <p class="muted" x-data="{ since: new Date('{{ since }}'), now: new Date(),
          tick(){ this.now = new Date(); } }"
        x-init="setInterval(() => tick(), 1000)">
       Tiempo de jornada:
-      <strong x-text="(() => {
+      <strong class="clock" x-text="(() => {
         let s = Math.max(0, Math.floor((now - since)/1000));
         let h = String(Math.floor(s/3600)).padStart(2,'0');
         let m = String(Math.floor((s%3600)/60)).padStart(2,'0');
@@ -76,7 +80,7 @@
         {% for j in journeys %}
           <tr>
             <td>{{ j.check_in | madrid("%H:%M") }}</td>
-            <td>{% if j.check_out %}{{ j.check_out | madrid("%H:%M") }}{% else %}<span class="pill">en curso</span>{% endif %}</td>
+            <td>{% if j.check_out %}{{ j.check_out | madrid("%H:%M") }}{% else %}<span class="pill pill-warn">en curso</span>{% endif %}</td>
             <td>{% if j.bruto_min is not none %}{{ j.bruto_min // 60 }}h {{ j.bruto_min % 60 }}m{% else %}—{% endif %}</td>
             <td>{{ j.pausa_min // 60 }}h {{ j.pausa_min % 60 }}m</td>
             <td>{{ j.travel_no_min // 60 }}h {{ j.travel_no_min % 60 }}m</td>
