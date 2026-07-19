@@ -14,7 +14,7 @@ import jwt
 from fastapi import Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, set_request_claims
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db.models import Worker
@@ -97,6 +97,8 @@ async def require_web(request: Request, db: AsyncSession = Depends(get_db)) -> d
     if worker is None or not worker.is_active or worker.token_version != claims.get("tv", 0):
         raise WebRedirect("/login")
     claims["role"] = worker.role
+    # RLS (SEC-04a): inyecta los claims validados en la sesión (igual que la API JSON).
+    await set_request_claims(db, claims)
     if claims.get("pin_temporary") and request.url.path != "/cambiar-pin":
         raise WebRedirect("/cambiar-pin")
     return claims

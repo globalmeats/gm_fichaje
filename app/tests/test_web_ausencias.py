@@ -173,7 +173,8 @@ async def test_download_justificante_blocked_for_other(client, db):
     r = await client.get(
         f"/descargar/justificante/{absence.id}/{doc.id}", follow_redirects=False
     )
-    assert r.status_code == 403
+    # Bloqueado: 403 (capa de app) o 404 (con RLS el justificante ajeno ni es visible).
+    assert r.status_code in (403, 404)
 
 
 async def test_cancel_absence_web(client, db):

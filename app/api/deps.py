@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Awaitable, Callable
 
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.models import Worker
 from app.db.session import SessionLocal
@@ -21,9 +24,32 @@ _INVALID_SESSION = HTTPException(
 )
 
 
+async def set_request_claims(db: AsyncSession, claims: dict | None) -> None:
+    """Fija (o limpia) los claims de la petición como GUC de sesión para la RLS (SEC-04a).
+
+    Solo actúa si `rls_enforce` está activo. Se usa `set_config(..., is_local => false)` para
+    que el valor SOBREVIVA a los commits que hace la app a mitad de request (p. ej.
+    `append_event`); `get_db` lo limpia al abrir cada sesión, evitando fugas entre peticiones
+    que reutilizan una conexión del pool. `auth.uid()`/`auth.jwt()` leen de este GUC.
+    """
+    if not settings.rls_enforce:
+        return
+    payload = "" if not claims else json.dumps(
+        {"worker_id": str(claims.get("worker_id")), "role": claims.get("role")}
+    )
+    await db.execute(
+        text("SELECT set_config('request.jwt.claims', :v, false)"), {"v": payload}
+    )
+
+
 async def get_db() -> AsyncSession:
-    """Cede una sesión async y la cierra de forma determinista al terminar (BUG-09)."""
+    """Cede una sesión async y la cierra de forma determinista al terminar (BUG-09).
+
+    Al abrir la sesión limpia los claims RLS (defensa contra fugas por reuso de conexión del
+    pool); la petición autenticada los fija después vía `set_request_claims`.
+    """
     async with SessionLocal() as s:
+        await set_request_claims(s, None)
         yield s
 
 
@@ -54,6 +80,9 @@ async def get_current_claims(
     # El rol vigente manda sobre el del token (un cambio de rol ya invalidó el token, pero
     # por robustez servimos siempre el rol actual de la BD).
     claims["role"] = worker.role
+    # RLS (SEC-04a): inyecta los claims validados para que las políticas gaten las queries
+    # de datos del endpoint (persisten aunque el endpoint haga commit a mitad de request).
+    await set_request_claims(db, claims)
     return claims
 
 

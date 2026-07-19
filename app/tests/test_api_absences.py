@@ -187,7 +187,8 @@ async def test_download_blocked_for_other_employee(client, db):
     r = await client.get(
         f"/absences/{aid}/justificante/{doc_id}", headers=_auth(other.id, "empleado")
     )
-    assert r.status_code == 403
+    # Bloqueado: 403 (capa de app) o 404 (con RLS el registro ajeno ni es visible).
+    assert r.status_code in (403, 404)
 
 
 async def test_vacation_balance(client, db):

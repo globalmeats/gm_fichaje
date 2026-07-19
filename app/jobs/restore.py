@@ -26,7 +26,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.db.session import engine
+from app.db.session import admin_engine as engine
 from app.jobs.backup import MANIFEST_NAME, _download, decrypt, require_r2_config
 
 # El singleton de configuración se sustituye (la migración siembra su fila por defecto).

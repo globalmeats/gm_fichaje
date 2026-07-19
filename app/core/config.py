@@ -54,8 +54,14 @@ class Settings(BaseSettings):
     # (production/staging) activa la guarda de secretos (B1).
     app_env: str = "local"
 
-    # Base de datos
+    # Base de datos. `database_url` es la conexión PRIVILEGIADA (migraciones, seed, jobs).
     database_url: str = "postgresql+asyncpg://fichajes:localdev@localhost:5432/fichajes"
+    # RLS en runtime (SEC-04a). Si `rls_enforce` es True, la APP (api/web) conecta con
+    # `app_database_url` (un rol NO superusuario, sin BYPASSRLS) e inyecta los claims del JWT
+    # por sesión para que las políticas RLS gaten de verdad. Por defecto False: la app usa
+    # `database_url` y la RLS queda como defensa en profundidad inerte (comportamiento actual).
+    rls_enforce: bool = False
+    app_database_url: str = ""  # si vacío, la app usa database_url
 
     # JWT
     jwt_secret: str = DEV_JWT_SECRET

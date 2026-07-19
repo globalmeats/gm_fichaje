@@ -42,7 +42,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
 from app.core.time import utc_now
-from app.db.session import engine
+from app.db.session import admin_engine as engine
 
 ARCHIVE_PREFIX = "gm_fichaje"
 MANIFEST_NAME = "manifest.json"

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.db.session import engine
+from app.db.session import admin_engine as engine
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 

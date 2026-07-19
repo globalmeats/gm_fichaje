@@ -16,7 +16,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.db import migrate
-from app.db.session import SessionLocal, engine
+
+# El fixture `db` usa la conexión ADMIN (privilegiada): los tests preparan e inspeccionan
+# datos directamente, saltándose la RLS. La API (fixture `client`) usa la conexión de app,
+# que con `rls_enforce` aplica la RLS. Con rls_enforce=False ambas coinciden (superusuario).
+from app.db.session import AdminSessionLocal, admin_engine, engine
 from app.main import app
 
 # Solo estos errores (BD no disponible) justifican SKIP: en local sin Postgres los tests de
@@ -30,7 +34,7 @@ async def prepared():
     """Aplica migraciones y deja la tabla worker vacía. Omite si no hay BD."""
     try:
         await migrate.run()
-        async with engine.begin() as conn:
+        async with admin_engine.begin() as conn:
             # El TRUNCATE de worker cascadea a time_record/record_correction, que desde 0014
             # tienen guarda anti-TRUNCATE (SEC-05). En el reset deliberado de test desactivamos
             # los triggers solo en esta transacción (como hace el restore).
@@ -49,13 +53,16 @@ async def prepared():
     except _DB_UNAVAILABLE as exc:
         pytest.skip(f"Base de datos no disponible para tests de integración: {exc}")
     yield
-    # Aísla del loop del siguiente test (asyncpg liga el pool al event loop).
-    await engine.dispose()
+    # Aísla del loop del siguiente test (asyncpg liga el pool al event loop). Con rls_enforce
+    # el engine de app (app_rw) es distinto del admin: hay que disponer ambos.
+    await admin_engine.dispose()
+    if engine is not admin_engine:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def db(prepared):
-    async with SessionLocal() as session:
+    async with AdminSessionLocal() as session:
         yield session
 
 

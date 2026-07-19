@@ -111,10 +111,10 @@ async def test_list_corrections_access(client, db):
     assert r.status_code == 200
     assert len(r.json()) == 1
 
-    # Otro empleado NO.
+    # Otro empleado NO (bloqueado: 403 en capa de app, 404 si la RLS oculta el registro).
     hx = _auth(create_access_token(other.id, "empleado", pin_temporary=False))
     r = await client.get(f"/records/{rec.id}/corrections", headers=hx)
-    assert r.status_code == 403
+    assert r.status_code in (403, 404)
 
     # La supervisión sí.
     r = await client.get(f"/records/{rec.id}/corrections", headers=hs)

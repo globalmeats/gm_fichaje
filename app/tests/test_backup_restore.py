@@ -15,7 +15,7 @@ from sqlalchemy import text
 
 from app.audit.chain import append_event, verify_chain
 from app.core.config import settings
-from app.db.session import engine
+from app.db.session import admin_engine
 from app.jobs import backup, restore
 from app.services.onboarding import create_employee
 
@@ -54,7 +54,8 @@ async def test_roundtrip_backup_restore(db):
     assert ciphertext != blob
     assert backup.decrypt(ciphertext) == blob
 
-    async with engine.begin() as conn:
+    # Reset privilegiado (como el restore real): conexión admin, no la de app (app_rw).
+    async with admin_engine.begin() as conn:
         # SEC-05: worker cascadea a time_record (guarda anti-TRUNCATE); desactiva triggers
         # solo en esta transacción de reset, igual que hace el restore.
         await conn.execute(text("SET LOCAL session_replication_role = 'replica'"))

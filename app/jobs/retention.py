@@ -23,7 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_now
 from app.db.models import RetentionLog, TimeRecord
-from app.db.session import SessionLocal, engine
+from app.db.session import AdminSessionLocal as SessionLocal
+from app.db.session import admin_engine as engine
 
 # Años de conservación obligatoria (RDL 8/2019 art. 34.9 → desarrollado en doctrina/Inspección).
 RETENTION_YEARS = 4

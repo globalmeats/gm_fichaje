@@ -34,11 +34,15 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   es constante en código; debería poder editarse como config del convenio.
 - **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
   justificantes subidos no se escanean ni tienen política de borrado documentada.
-- **SEC-04(a): activar la RLS en runtime (auditoría 2026-07)** — las políticas RLS están
-  escritas pero no se evalúan (la app conecta como superusuario, que las omite, y `auth.uid()`
-  es un stub que devuelve NULL). RAT/DPIA ya NO presentan la RLS como salvaguarda activa
-  (SEC-04(b) hecho). Alto riesgo de implementación → **requiere OK humano y sesión dedicada con
-  pruebas exhaustivas**. Pasos concretos que faltan:
+- **SEC-04(a): RLS en runtime — MECANISMO IMPLEMENTADO Y PROBADO (2026-07-19), enforcement
+  gated en prod**. Construido tras un flag `RLS_ENFORCE` (por defecto OFF = comportamiento
+  actual). Con ON: la app conecta como rol NO superusuario (`app_database_url`), inyecta los
+  claims del JWT por sesión, y `app.uid()`/`app.role()` (migración 0016) hacen que las políticas
+  de time_record/record_correction/absence/absence_document gaten de verdad; jobs/migraciones/seed
+  usan la conexión privilegiada. Suite completa (246) verde en AMBOS modos + `test_rls_enforcement`
+  prueba el bloqueo cruzado a nivel de BD. **Falta solo el flip en producción** (crear rol `app_rw`
+  en Supabase + `scripts/rls_grants.sql` + `RLS_ENFORCE=true`/`APP_DATABASE_URL`), documentado en
+  `docs/RLS.md`; y actualizar DPIA/RAT cuando quede ACTIVO en prod. Pasos originales (referencia):
   1. **Rol de BD sin privilegios**: crear en Supabase un rol de aplicación NO superusuario y sin
      `BYPASSRLS`, con los `GRANT` mínimos (SELECT/INSERT donde toque) sobre las tablas con datos
      personales. Apuntar el `DATABASE_URL` de la app a ese rol (guardar el de superusuario solo

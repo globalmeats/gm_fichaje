@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import sys
 
-from app.db.session import SessionLocal, engine
+from app.db.session import AdminSessionLocal as SessionLocal
+from app.db.session import admin_engine as engine
 from app.services.onboarding import create_employee
 
 
