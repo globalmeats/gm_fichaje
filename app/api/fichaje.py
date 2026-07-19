@@ -132,6 +132,15 @@ async def _ordered_event_types(db: AsyncSession, worker_id: uuid.UUID) -> list[s
     return [r.event_type for r in rows]
 
 
+def _state_validator(event_type: str):
+    """Validador de transición para `append_event`: se ejecuta bajo el lock (REQ-01)."""
+
+    def _validate(ordered_types: list[str]) -> None:
+        next_state(reconstruct_state(ordered_types), event_type)
+
+    return _validate
+
+
 @router.post("/event", response_model=FichajeEventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     body: FichajeEventRequest,
@@ -147,26 +156,24 @@ async def create_event(
 
     worker_id = uuid.UUID(claims["worker_id"])
 
-    # Reconstruye el estado actual del histórico y valida la transición (REQ-01).
-    current = reconstruct_state(await _ordered_event_types(db, worker_id))
-    try:
-        next_state(current, body.event_type)
-    except InvalidTransition as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-
     # `travel_computes` solo es significativo en desplazamientos; el resto guarda el neutro.
     travel_computes = body.travel_computes if body.event_type.startswith("travel_") else True
     worker = await db.get(Worker, worker_id)
     stored_geo = _geo_to_store(worker, body.modalidad, body.geo)
-    record = await append_event(
-        db,
-        worker_id,
-        body.event_type,
-        modalidad=body.modalidad,
-        source=body.source,
-        travel_computes=travel_computes,
-        geo=stored_geo,
-    )
+    # La transición (REQ-01) se valida DENTRO del lock de append_event: check + act atómicos.
+    try:
+        record = await append_event(
+            db,
+            worker_id,
+            body.event_type,
+            modalidad=body.modalidad,
+            source=body.source,
+            travel_computes=travel_computes,
+            geo=stored_geo,
+            validate_transition=_state_validator(body.event_type),
+        )
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
     await _alert_if_annual_cap(db, worker)
     return FichajeEventResponse(
@@ -231,27 +238,25 @@ async def sync_event(
             deduplicated=True,
         )
 
-    # 3) Valida la transición de estado contra el histórico (igual que el fichaje online).
-    current = reconstruct_state(await _ordered_event_types(db, worker_id))
-    try:
-        next_state(current, body.event_type)
-    except InvalidTransition as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-
+    # 3) Valida la transición (bajo el lock de append_event) e inserta atómicamente.
     travel_computes = body.travel_computes if body.event_type.startswith("travel_") else True
     worker = await db.get(Worker, worker_id)
     stored_geo = _geo_to_store(worker, body.modalidad, body.geo)
-    record = await append_event(
-        db,
-        worker_id,
-        body.event_type,
-        modalidad=body.modalidad,
-        source="offline_sync",
-        travel_computes=travel_computes,
-        geo=stored_geo,
-        client_event_id=body.client_event_id,
-        occurred_at=occurred,
-    )
+    try:
+        record = await append_event(
+            db,
+            worker_id,
+            body.event_type,
+            modalidad=body.modalidad,
+            source="offline_sync",
+            travel_computes=travel_computes,
+            geo=stored_geo,
+            client_event_id=body.client_event_id,
+            occurred_at=occurred,
+            validate_transition=_state_validator(body.event_type),
+        )
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
     await _alert_if_annual_cap(db, worker)
     return SyncEventResponse(
@@ -272,7 +277,8 @@ async def today(
 ) -> TodayResponse:
     worker_id = uuid.UUID(claims["worker_id"])
 
-    state = reconstruct_state(await _ordered_event_types(db, worker_id))
+    # Lectura defensiva: nunca 500 aunque el histórico llegara a ser incoherente (BUG-01).
+    state = reconstruct_state(await _ordered_event_types(db, worker_id), strict=False)
 
     day_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
     rows = (

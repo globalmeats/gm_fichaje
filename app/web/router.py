@@ -23,13 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.absences import vacation_balance_for
 from app.api.auth import authenticate, change_worker_pin
 from app.api.corrections import apply_correction
-from app.api.deps import get_db
+from app.api.deps import can_manage_account, get_db
 from app.api.export import OVERSIGHT_ROLES, load_report
-from app.api.fichaje import _alert_if_off_hours, _ordered_event_types
+from app.api.fichaje import _alert_if_off_hours, _ordered_event_types, _state_validator
 from app.audit.chain import append_event
 from app.audit.verify import verify_all
 from app.core.crypto import decrypt_blob, encrypt_blob
-from app.core.logging import client_ip
+from app.core.logging import client_ip, log_event
 from app.core.security import create_access_token, generate_pin, hash_pin
 from app.core.time import utc_now
 from app.db.models import (
@@ -140,7 +140,8 @@ def _journey_rows(journeys: list, policy: TimePolicy | None) -> list[dict]:
 
 async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
     """Estado de jornada + botones válidos + eventos y jornadas de hoy (mismo camino que la API)."""
-    state = reconstruct_state(await _ordered_event_types(db, worker_id))
+    # Lectura defensiva: nunca 500 aunque el histórico llegara a ser incoherente (BUG-01).
+    state = reconstruct_state(await _ordered_event_types(db, worker_id), strict=False)
 
     day_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
     events = (
@@ -302,18 +303,21 @@ async def fichar_evento(
 ) -> Response:
     worker_id = uuid.UUID(claims["worker_id"])
 
-    # Valida la transición por el mismo camino que la API (máquina de estados + append_event).
-    current = reconstruct_state(await _ordered_event_types(db, worker_id))
+    # La transición se valida DENTRO del lock de append_event: check + act atómicos (BUG-01).
     try:
-        next_state(current, event_type)
+        record = await append_event(
+            db,
+            worker_id,
+            event_type,
+            modalidad="presencial",
+            source="web",
+            validate_transition=_state_validator(event_type),
+        )
     except InvalidTransition as exc:
         ctx = await _estado_ctx(db, worker_id)
         # Fragmento con el mensaje 409 legible (htmx swap a 200 para reflejar el estado real).
         return _render(request, "_estado.html", claims=claims, error=str(exc), **ctx)
 
-    record = await append_event(
-        db, worker_id, event_type, modalidad="presencial", source="web"
-    )
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
 
     ctx = await _estado_ctx(db, worker_id)
@@ -549,13 +553,18 @@ async def admin_reset_pin(
 ) -> Response:
     worker = await db.get(Worker, uuid.UUID(worker_id))
     reset = None
-    if worker is not None:
+    error = None
+    if worker is not None and not can_manage_account(claims.get("role"), worker.role):
+        # SEC-01: no resetear cuentas de rol igual o superior al del actor.
+        error = "No puedes resetear el PIN de una cuenta de rol igual o superior al tuyo."
+    elif worker is not None:
         new_pin = generate_pin(worker.code_norm)
         worker.pin_hash = hash_pin(new_pin)
         worker.pin_temporary = True
         worker.failed_attempts = 0
         worker.locked_until = None
         await db.commit()
+        log_event("pin_reset", by=claims.get("worker_id"), target=worker.code)
         reset = {"employee_code": worker.code, "pin": new_pin}
 
     return _render(
@@ -564,6 +573,7 @@ async def admin_reset_pin(
         claims=claims,
         workers=await _all_workers(db),
         reset=reset,
+        error=error,
     )
 
 

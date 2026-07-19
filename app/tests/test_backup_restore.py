@@ -55,6 +55,9 @@ async def test_roundtrip_backup_restore(db):
     assert backup.decrypt(ciphertext) == blob
 
     async with engine.begin() as conn:
+        # SEC-05: worker cascadea a time_record (guarda anti-TRUNCATE); desactiva triggers
+        # solo en esta transacción de reset, igual que hace el restore.
+        await conn.execute(text("SET LOCAL session_replication_role = 'replica'"))
         await conn.execute(text("TRUNCATE worker RESTART IDENTITY CASCADE"))
 
     restored = await restore.run_restore(ciphertext)

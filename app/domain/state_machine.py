@@ -61,14 +61,22 @@ def next_state(current: State, event: str) -> State:
     return allowed[event]
 
 
-def reconstruct_state(events: Iterable[str]) -> State:
+def reconstruct_state(events: Iterable[str], *, strict: bool = True) -> State:
     """Reconstruye el estado actual plegando los `event_type` en orden desde IDLE.
 
     Cada check_out devuelve a IDLE, así que el resultado refleja la jornada abierta
-    (los eventos tras el último check_out). Asume un histórico válido (lo garantiza la
-    validación en escritura); ante un evento imposible deja constancia vía excepción.
+    (los eventos tras el último check_out). El histórico válido lo garantiza la validación
+    en escritura (atómica bajo lock, ver `audit.chain.append_event`).
+
+    `strict=True` (escritura): ante un evento imposible lanza `InvalidTransition`. `strict=False`
+    (lectura defensiva): ignora un evento incoherente y sigue, para que una vista NUNCA caiga a
+    500 aunque el histórico llegara a estar corrupto por una vía inesperada.
     """
     state = State.IDLE
     for event in events:
-        state = next_state(state, event)
+        try:
+            state = next_state(state, event)
+        except InvalidTransition:
+            if strict:
+                raise
     return state

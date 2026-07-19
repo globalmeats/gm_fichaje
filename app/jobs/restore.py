@@ -24,6 +24,8 @@ import sys
 import tarfile
 from pathlib import Path
 
+from sqlalchemy import text
+
 from app.db.session import engine
 from app.jobs.backup import MANIFEST_NAME, _download, decrypt, require_r2_config
 
@@ -61,6 +63,11 @@ async def run_restore(blob: bytes, *, force: bool = False) -> dict:
     manifest, tables = read_archive(blob)
 
     async with engine.begin() as conn:
+        # SEC-05: desactiva los triggers (incluido el anti-TRUNCATE de 0014) durante la
+        # reconstrucción. Solo afecta a esta transacción; el restore es una operación admin
+        # deliberada sobre una BD recién migrada (simulacros en local, nunca contra prod).
+        # Vía la conexión de SQLAlchemy para que aplique a la transacción que comparte el driver.
+        await conn.execute(text("SET LOCAL session_replication_role = 'replica'"))
         raw = await conn.get_raw_connection()
         driver = raw.driver_connection
 

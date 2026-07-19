@@ -8,6 +8,7 @@ encadenado por trabajador), de forma serializada para evitar carreras en `prev_h
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -63,11 +64,18 @@ async def append_event(
     geo: str | None = None,
     client_event_id: str | None = None,
     occurred_at: datetime | None = None,
+    validate_transition: Callable[[list[str]], None] | None = None,
 ) -> TimeRecord:
     """Inserta un evento sellado y encadenado para `worker_id` y hace commit.
 
     Serializa la cadena por trabajador con un advisory lock de transacción para que dos
     inserciones concurrentes no lean el mismo `prev_hash`.
+
+    `validate_transition` (REQ-01): si se pasa, se ejecuta DENTRO del lock con la lista de
+    `event_type` en orden; debe lanzar si la transición es inválida. Al vivir bajo el mismo
+    lock que el insert, la validación de estado y la escritura son ATÓMICAS: dos peticiones
+    concurrentes del mismo trabajador no pueden colar ambas un evento que juntas violen la
+    máquina de estados (p. ej. doble check_in por doble clic o cola offline + online).
 
     `geo` debe llegar YA CIFRADO (ciphertext Fernet) por la capa de API: aquí se sella tal
     cual y se almacena cifrado (REQ-20/23), nunca en claro. `occurred_at` se acepta SOLO para
@@ -82,6 +90,7 @@ async def append_event(
     )
 
     # 2) Idempotencia (REQ-22): si el evento ya se sincronizó, devolverlo sin duplicar.
+    #    Va antes de validar: un reintento de un evento ya sellado es inocuo por definición.
     if client_event_id is not None:
         existing = (
             await db.execute(
@@ -90,6 +99,18 @@ async def append_event(
         ).scalar_one_or_none()
         if existing is not None:
             return existing
+
+    # 2b) Validación de estado bajo el lock (REQ-01): check + act atómicos. Relee el histórico
+    #     ya serializado por el lock, de modo que refleja lo que otra transacción acabe de sellar.
+    if validate_transition is not None:
+        ordered = (
+            await db.execute(
+                select(TimeRecord.event_type)
+                .where(TimeRecord.worker_id == worker_id)
+                .order_by(TimeRecord.seq.asc())
+            )
+        ).all()
+        validate_transition([r.event_type for r in ordered])
 
     # 3) Último eslabón del trabajador -> prev_hash / seq.
     last = (

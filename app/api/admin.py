@@ -12,8 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_role
+from app.api.deps import can_manage_account, get_db, require_role
 from app.audit.verify import verify_all
+from app.core.logging import log_event
 from app.core.security import generate_pin, hash_pin
 from app.core.time import utc_now
 from app.db.models import AuditAlert, TimePolicy, Worker
@@ -72,12 +73,21 @@ async def admin_reset_pin(
     if worker is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trabajador no existe.")
 
+    # SEC-01: nadie resetea el PIN de una cuenta de rango igual o superior al suyo (evita que
+    # un supervisor resetee a un admin, lea el PIN y se apodere de la cuenta).
+    if not can_manage_account(claims.get("role"), worker.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes resetear el PIN de una cuenta de rol igual o superior al tuyo.",
+        )
+
     new_pin = generate_pin(worker.code_norm)
     worker.pin_hash = hash_pin(new_pin)
     worker.pin_temporary = True  # fuerza cambio en el siguiente login
     worker.failed_attempts = 0
     worker.locked_until = None
     await db.commit()
+    log_event("pin_reset", by=claims.get("worker_id"), target=worker.code)
 
     return WorkerCreatedResponse(
         id=str(worker.id),
