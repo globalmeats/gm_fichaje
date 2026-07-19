@@ -66,8 +66,9 @@ async def test_login_wrong_pin_rejected(client, db):
 
 
 async def test_create_worker_requires_admin(client, db):
-    # Token de empleado normal no puede dar de alta.
-    emp_token = create_access_token("00000000-0000-0000-0000-000000000000", "empleado", False)
+    # Token de empleado normal (real, activo) no puede dar de alta.
+    emp = await create_employee(db, "Em", "Pleado")
+    emp_token = create_access_token(emp.id, "empleado", False)
     r = await client.post(
         "/admin/workers",
         json={"first_name": "X", "last_name": "Y"},

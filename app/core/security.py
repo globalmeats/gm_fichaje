@@ -62,13 +62,20 @@ def generate_pin(code_norm: str = "") -> str:
 
 # ---- JWT ----
 
-def create_access_token(worker_id: str, role: str, pin_temporary: bool) -> str:
-    """Emite un JWT con claims `worker_id`, `role` y `pin_temporary` (REQ-05)."""
+def create_access_token(
+    worker_id: str, role: str, pin_temporary: bool, token_version: int = 0
+) -> str:
+    """Emite un JWT con claims `worker_id`, `role`, `pin_temporary` y `tv` (REQ-05/SEC-06).
+
+    `tv` (token_version) se valida contra `worker.token_version` en cada request: al
+    incrementarlo (reset de PIN, bloqueo, cambio de rol/PIN) este token deja de ser válido.
+    """
     now = utc_now()
     payload = {
         "worker_id": worker_id,
         "role": role,
         "pin_temporary": pin_temporary,
+        "tv": token_version,
         "iat": now,
         "exp": now + timedelta(minutes=settings.jwt_expires_min),
     }

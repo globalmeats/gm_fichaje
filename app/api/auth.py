@@ -37,6 +37,9 @@ _INVALID = HTTPException(
     detail="Código de empleado o PIN incorrectos.",
 )
 
+# Hash bcrypt fijo para el trabajo constante del login cuando el código no existe (SEC-03).
+_DUMMY_PIN_HASH = hash_pin("000000")
+
 
 async def _get_worker_by_code(db: AsyncSession, employee_code: str) -> Worker | None:
     code_norm = normalize(employee_code)
@@ -55,8 +58,11 @@ async def authenticate(
     """
     worker = await _get_worker_by_code(db, employee_code)
 
-    # Respuesta uniforme para no filtrar si el código existe.
+    # Respuesta uniforme para no filtrar si el código existe. Además, trabajo CONSTANTE
+    # (SEC-03): si el trabajador no existe, se verifica igualmente contra un hash dummy para
+    # que el coste temporal sea el mismo que con un código válido y no haya oráculo de timing.
     if worker is None or not worker.is_active:
+        verify_pin(pin, _DUMMY_PIN_HASH)
         log_event("login_failed", reason="unknown_or_inactive", ip=ip)
         raise _INVALID
 
@@ -74,6 +80,7 @@ async def authenticate(
         if locked:
             worker.locked_until = now + timedelta(minutes=settings.lockout_minutes)
             worker.failed_attempts = 0
+            worker.token_version += 1  # SEC-06: expulsa sesiones activas al bloquear.
         await db.commit()
         # REQ-25: deja rastro de cada fallo y, si procede, del bloqueo de la cuenta.
         await record_alert(
@@ -105,7 +112,10 @@ async def login(
 ) -> TokenResponse:
     worker = await authenticate(db, body.employee_code, body.pin, ip=client_ip(request))
     token = create_access_token(
-        worker_id=str(worker.id), role=worker.role, pin_temporary=worker.pin_temporary
+        worker_id=str(worker.id),
+        role=worker.role,
+        pin_temporary=worker.pin_temporary,
+        token_version=worker.token_version,
     )
     return TokenResponse(access_token=token, must_change_pin=worker.pin_temporary)
 
@@ -146,6 +156,7 @@ async def change_worker_pin(
 
     worker.pin_hash = hash_pin(new_pin)
     worker.pin_temporary = False
+    worker.token_version += 1  # SEC-06: invalida el token del PIN anterior.
     await db.commit()
     log_event("pin_changed", code=worker.code, ip=ip)
     return worker
@@ -165,8 +176,11 @@ async def change_pin(
         body.new_pin,
         ip=client_ip(request),
     )
-    # Token nuevo ya sin la marca de PIN temporal.
+    # Token nuevo ya sin la marca de PIN temporal, con la token_version incrementada.
     token = create_access_token(
-        worker_id=str(worker.id), role=worker.role, pin_temporary=False
+        worker_id=str(worker.id),
+        role=worker.role,
+        pin_temporary=False,
+        token_version=worker.token_version,
     )
     return TokenResponse(access_token=token, must_change_pin=False)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
 
 import jwt
@@ -10,27 +11,49 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
+from app.db.models import Worker
 from app.db.session import get_session
 
 _bearer = HTTPBearer(auto_error=True)
 
+_INVALID_SESSION = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida o revocada."
+)
 
-async def get_db() -> AsyncSession:  # pragma: no cover - thin wrapper
+
+async def get_db() -> AsyncSession:
     async for s in get_session():
         yield s
 
 
-def get_current_claims(
+async def get_current_claims(
     creds: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Decodifica el JWT y devuelve sus claims (worker_id, role, pin_temporary)."""
+    """Valida el JWT y lo contrasta con la BD en cada request (SEC-06/BUG-04).
+
+    Además de decodificar, comprueba que el trabajador existe, sigue activo y que el claim
+    `tv` coincide con su `token_version`: así un reset de PIN, un bloqueo, un cambio de rol
+    o una desactivación invalidan de inmediato los tokens ya emitidos (logout servidor).
+    """
     try:
-        return decode_token(creds.credentials)
+        claims = decode_token(creds.credentials)
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido o expirado.",
         ) from exc
+    try:
+        worker_id = uuid.UUID(str(claims.get("worker_id")))
+    except ValueError as exc:
+        raise _INVALID_SESSION from exc
+    worker = await db.get(Worker, worker_id)
+    if worker is None or not worker.is_active or worker.token_version != claims.get("tv", 0):
+        raise _INVALID_SESSION
+    # El rol vigente manda sobre el del token (un cambio de rol ya invalidó el token, pero
+    # por robustez servimos siempre el rol actual de la BD).
+    claims["role"] = worker.role
+    return claims
 
 
 # Jerarquía de roles para operaciones sobre cuentas (SEC-01). Un actor solo puede actuar

@@ -89,3 +89,12 @@ def test_log_event_drops_none_fields(logs):
     log_event("export", format="csv", start=None)
     fields = _events(logs, "export")[-1]
     assert fields == {"format": "csv"}
+
+
+async def test_security_headers_present(client):
+    """SEC-07: toda respuesta lleva las cabeceras de seguridad."""
+    r = await client.get("/health")
+    assert "default-src 'self'" in r.headers["content-security-policy"]
+    assert r.headers["x-frame-options"] == "DENY"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert "max-age=" in r.headers["strict-transport-security"]

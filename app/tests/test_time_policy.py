@@ -14,7 +14,7 @@ def _auth(token: str) -> dict[str, str]:
 
 
 async def test_get_time_policy_defaults(client, db):
-    w = await create_employee(db, "Pol", "Icy")
+    w = await create_employee(db, "Pol", "Icy", role="admin")
     h = _auth(create_access_token(w.id, "admin", pin_temporary=False))
 
     r = await client.get("/admin/time-policy", headers=h)
@@ -25,7 +25,7 @@ async def test_get_time_policy_defaults(client, db):
 
 
 async def test_admin_updates_policy(client, db):
-    w = await create_employee(db, "Edit", "Pol")
+    w = await create_employee(db, "Edit", "Pol", role="admin")
     h = _auth(create_access_token(w.id, "admin", pin_temporary=False))
 
     r = await client.put(
@@ -56,7 +56,7 @@ async def test_non_admin_cannot_update_policy(client, db):
 
 async def test_policy_change_reflected_in_summary(client, db):
     """Con la pausa NO computable, la misma pausa deja de restar (efectivo == bruto)."""
-    admin = await create_employee(db, "Adm", "Sum")
+    admin = await create_employee(db, "Adm", "Sum", role="admin")
     ha = _auth(create_access_token(admin.id, "admin", pin_temporary=False))
 
     # Desactiva la computabilidad de pausas globalmente.

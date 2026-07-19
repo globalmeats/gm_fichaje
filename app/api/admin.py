@@ -86,6 +86,7 @@ async def admin_reset_pin(
     worker.pin_temporary = True  # fuerza cambio en el siguiente login
     worker.failed_attempts = 0
     worker.locked_until = None
+    worker.token_version += 1  # SEC-06: invalida sesiones activas del titular.
     await db.commit()
     log_event("pin_reset", by=claims.get("worker_id"), target=worker.code)
 

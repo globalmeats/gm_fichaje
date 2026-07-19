@@ -18,22 +18,32 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import settings
 
+# SEC-08: geolocalización y justificantes médicos se cifran con claves DISTINTAS, para que el
+# compromiso de una no exponga la otra categoría de dato. Se derivan de sus secretos de entorno
+# con SHA-256 + separación de dominio; el secreto debe ser aleatorio de alta entropía (ver
+# docs/BACKUP.md y .env.example). Si `doc_encryption_key` no está configurada, la clave de
+# documentos se deriva del secreto de geo con una etiqueta distinta (siguen siendo claves
+# diferentes); en producción conviene una `DOC_ENCRYPTION_KEY` dedicada.
 
-def _fernet() -> Fernet:
-    """Deriva una clave Fernet (32 bytes url-safe base64) de `settings.geo_encryption_key`.
 
-    Aceptamos cualquier secreto de configuración y lo normalizamos a una clave válida con
-    SHA-256, así el operador no tiene que generar un base64 de 32 bytes a mano.
-    """
-    digest = hashlib.sha256(settings.geo_encryption_key.encode("utf-8")).digest()
+def _derive_fernet(secret: str, label: str) -> Fernet:
+    digest = hashlib.sha256(f"{label}:{secret}".encode()).digest()
     return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _fernet_for(kind: str) -> Fernet:
+    if kind == "geo":
+        return _derive_fernet(settings.geo_encryption_key, "geo")
+    # documentos: clave dedicada si existe; si no, derivada del secreto de geo con otra etiqueta.
+    secret = settings.doc_encryption_key or settings.geo_encryption_key
+    return _derive_fernet(secret, "doc")
 
 
 def encrypt_geo(plaintext: str | None) -> str | None:
     """Cifra una coordenada. `None`/vacío -> `None` (no se almacena nada)."""
     if not plaintext:
         return None
-    return _fernet().encrypt(plaintext.encode("utf-8")).decode("ascii")
+    return _fernet_for("geo").encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def decrypt_geo(token: str | None) -> str | None:
@@ -41,20 +51,20 @@ def decrypt_geo(token: str | None) -> str | None:
     if not token:
         return None
     try:
-        return _fernet().decrypt(token.encode("ascii")).decode("utf-8")
+        return _fernet_for("geo").decrypt(token.encode("ascii")).decode("utf-8")
     except (InvalidToken, ValueError):
         return None
 
 
 def encrypt_blob(data: bytes) -> bytes:
-    """Cifra un binario (justificante de asistencia, REQ-28) con la misma clave Fernet.
+    """Cifra un binario (justificante de asistencia, REQ-28) con la clave de documentos.
 
     El documento se guarda CIFRADO en `absence_document.content_encrypted`: un volcado del
     Postgres no expone el adjunto, y la clave vive solo en el entorno.
     """
-    return _fernet().encrypt(data)
+    return _fernet_for("doc").encrypt(data)
 
 
 def decrypt_blob(token: bytes) -> bytes:
     """Descifra un binario cifrado con `encrypt_blob`. Lanza si el token es inválido."""
-    return _fernet().decrypt(token)
+    return _fernet_for("doc").decrypt(token)

@@ -210,7 +210,10 @@ async def login_submit(
         )
 
     token = create_access_token(
-        worker_id=str(worker.id), role=worker.role, pin_temporary=worker.pin_temporary
+        worker_id=str(worker.id),
+        role=worker.role,
+        pin_temporary=worker.pin_temporary,
+        token_version=worker.token_version,
     )
     dest = "/cambiar-pin" if worker.pin_temporary else "/fichar"
     response = RedirectResponse(dest, status_code=303)
@@ -258,7 +261,12 @@ async def change_pin_submit(
             error=exc.detail,
         )
 
-    token = create_access_token(worker_id=str(worker.id), role=worker.role, pin_temporary=False)
+    token = create_access_token(
+        worker_id=str(worker.id),
+        role=worker.role,
+        pin_temporary=False,
+        token_version=worker.token_version,
+    )
     response = RedirectResponse("/fichar", status_code=303)
     set_session(response, token, secure=request.url.scheme == "https")
     return response
@@ -563,6 +571,7 @@ async def admin_reset_pin(
         worker.pin_temporary = True
         worker.failed_attempts = 0
         worker.locked_until = None
+        worker.token_version += 1  # SEC-06: invalida sesiones activas del titular.
         await db.commit()
         log_event("pin_reset", by=claims.get("worker_id"), target=worker.code)
         reset = {"employee_code": worker.code, "pin": new_pin}

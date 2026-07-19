@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # TLS (sslmode=require) y la clave de cifrado se inyecta por entorno (el default es solo dev).
     db_require_tls: bool = True
     geo_encryption_key: str = DEV_GEO_KEY
+    # Clave dedicada para cifrar los justificantes (SEC-08). Si se deja vacía, se deriva del
+    # secreto de geo con separación de dominio (siguen siendo claves distintas). En producción
+    # conviene configurar una DOC_ENCRYPTION_KEY aleatoria propia.
+    doc_encryption_key: str = ""
 
     # Confiar en la cabecera CF-Connecting-IP para la IP real de los logs. Solo debe
     # activarse cuando Cloudflare está delante (Fase 3 del go-live); sin proxy, la

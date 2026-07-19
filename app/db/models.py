@@ -136,6 +136,11 @@ class Worker(Base):
         Integer, nullable=False, server_default=text("0")
     )
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Versión de token (SEC-06): se incrementa en reset de PIN, bloqueo, cambio de rol y
+    # cambio de PIN, invalidando los JWT ya emitidos (cuyo claim `tv` deja de coincidir).
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

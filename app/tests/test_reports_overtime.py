@@ -37,7 +37,7 @@ async def test_overtime_report_own(client, db):
 
 
 async def test_oversight_can_query_other_worker(client, db):
-    sup = await create_employee(db, "Sup", "Ervisor")
+    sup = await create_employee(db, "Sup", "Ervisor", role="supervisor")
     emp = await create_employee(db, "Sub", "Ordinado")
     hs = _auth(create_access_token(sup.id, "supervisor", pin_temporary=False))
 

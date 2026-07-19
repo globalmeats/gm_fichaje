@@ -35,6 +35,33 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Fichajes Global Meats", version="0.1.0", lifespan=lifespan)
 
+# SEC-07: cabeceras de seguridad en toda respuesta. CSP permite Alpine ('unsafe-eval', usa
+# Function()) y el <style> inline del layout ('unsafe-inline' en style-src); no hay bloques
+# <script> inline. frame-ancestors 'none' bloquea el clickjacking sobre /login y /fichar.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+)
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": _CSP,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(absences.router)
 app.include_router(admin.router)

@@ -7,13 +7,17 @@ falta o caducidad de sesión **redirige a /login**, y un rol insuficiente muestr
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import uuid
+from collections.abc import Awaitable, Callable
 
 import jwt
 from fastapi import Depends, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_db
 from app.core.config import settings
 from app.core.security import decode_token
+from app.db.models import Worker
 
 COOKIE_NAME = "gm_session"
 # Cookie NO sensible que recuerda el código de empleado entre sesiones (nunca el PIN).
@@ -77,20 +81,31 @@ def web_claims(request: Request) -> dict | None:
         return None
 
 
-def require_web(request: Request) -> dict:
-    """Exige sesión válida. Sin ella -> /login; con PIN temporal -> /cambiar-pin."""
+async def require_web(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Exige sesión válida. Sin ella -> /login; con PIN temporal -> /cambiar-pin.
+
+    Contrasta el token con la BD (SEC-06/BUG-04): trabajador activo y `tv` coincidente; si
+    no, se trata como sesión caducada y se redirige a /login.
+    """
     claims = web_claims(request)
     if claims is None:
         raise WebRedirect("/login")
+    try:
+        worker = await db.get(Worker, uuid.UUID(str(claims.get("worker_id"))))
+    except ValueError:
+        worker = None
+    if worker is None or not worker.is_active or worker.token_version != claims.get("tv", 0):
+        raise WebRedirect("/login")
+    claims["role"] = worker.role
     if claims.get("pin_temporary") and request.url.path != "/cambiar-pin":
         raise WebRedirect("/cambiar-pin")
     return claims
 
 
-def require_web_role(*roles: str) -> Callable[[Request, dict], dict]:
+def require_web_role(*roles: str) -> Callable[..., Awaitable[dict]]:
     """Como `require_web` + comprobación de rol; si no, 403 (la API+RLS son la barrera real)."""
 
-    def _checker(request: Request, claims: dict = Depends(require_web)) -> dict:
+    async def _checker(request: Request, claims: dict = Depends(require_web)) -> dict:
         if claims.get("role") not in roles:
             raise WebForbidden()
         return claims
