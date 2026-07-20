@@ -45,13 +45,14 @@ de jornada** de Global Meats S.L.U. REQ-10 (🟢 VIGENTE).
 - **Residencia en la UE**: verificación automática de región (deploy + Supabase).
 - **Integridad/inmutabilidad**: append-only + hash SHA-256 encadenado + trigger
   anti-mutación + verificación de cadena; correcciones versionadas y selladas.
-- **Control de acceso**: la barrera efectiva es la **capa de aplicación** (comprobación
-  self-vs-supervisión en cada endpoint) + autenticación por PIN bcrypt con lockout, versión
-  de token para revocación de sesión, y alertas de auditoría. Las políticas **RLS** están
-  definidas en la base de datos como defensa en profundidad, pero **hoy no se evalúan en
-  runtime** (la app conecta con un rol que las omite); su activación efectiva está pendiente
-  (ver `docs/AUDITORIA-2026-07.md`, SEC-04). No debe presentarse la RLS como salvaguarda
-  activa mientras no se conecte con un rol restringido e inyección de claims por transacción.
+- **Control de acceso** (doble barrera): (1) **Row Level Security (RLS) activa en la base de
+  datos** (desde 2026-07-20) — la aplicación conecta con un rol NO superusuario y sin BYPASSRLS,
+  e inyecta los claims del trabajador por sesión; las políticas de las tablas con datos
+  personales (`time_record`, `record_correction`, `absence`, `absence_document`) solo dejan ver
+  las filas propias del trabajador o, a roles de supervisión, el conjunto. (2) **Capa de
+  aplicación**: comprobación self-vs-supervisión en cada endpoint. Más autenticación por PIN
+  bcrypt con lockout, versión de token para revocación de sesión y alertas de auditoría. Las
+  migraciones y tareas de sistema (backups) usan una conexión privilegiada separada.
 - **Minimización**: solo los datos imprescindibles; geo solo con consentimiento; en ausencias,
   solo justificante de **asistencia** (nunca diagnósticos) y la `baja` sin dato clínico.
 - **Cifrado del justificante**: el documento de ausencia se almacena cifrado (Fernet, clave

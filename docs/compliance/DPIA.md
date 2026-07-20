@@ -75,12 +75,13 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
   no geolocaliza al proveedor); el arranque y el despliegue **fallan** si no es UE. El bucket
   de backups es de jurisdicción UE (verificado contra el endpoint por `app/jobs/backup.py`).
   Sin transferencias internacionales.
-- **Control de acceso** (REQ-24): la barrera **efectiva** es la capa de aplicación
-  (aislamiento self-vs-supervisión en cada endpoint) + roles (supervisor/admin/rlt/inspeccion)
-  para acceso global de solo lectura. Las políticas **RLS** están escritas en las tablas como
-  defensa en profundidad **pero no se evalúan en runtime** (la app conecta con un rol que las
-  omite); su activación es un pendiente (ver `docs/AUDITORIA-2026-07.md`, SEC-04). No debe
-  presentarse la RLS como salvaguarda activa hasta entonces.
+- **Control de acceso** (REQ-24), **doble barrera**: (1) **RLS activa a nivel de base de datos**
+  (desde 2026-07-20): la app conecta con un rol NO superusuario e inyecta los claims del
+  trabajador por sesión, de modo que las políticas de `time_record`/`record_correction`/
+  `absence`/`absence_document` restringen las filas a las propias del trabajador (o al conjunto
+  para roles de supervisión) **en el propio motor**, aunque la capa de aplicación fallara.
+  (2) **Capa de aplicación**: aislamiento self-vs-supervisión en cada endpoint. Migraciones y
+  tareas de sistema (backups) usan una conexión privilegiada separada. Ver `docs/RLS.md`.
 - **Autenticación y sesión** (REQ-05/21): código de empleado único + PIN bcrypt; lockout
   anti fuerza bruta con trabajo constante (anti-enumeración); versión de token para
   revocación de sesión (reset de PIN/bloqueo/cambio de PIN); alertas de auditoría
@@ -106,7 +107,7 @@ hay monitorización de la jornada y posible tratamiento de ubicación.
 
 | Riesgo | Mitigación |
 |---|---|
-| Acceso no autorizado a registros ajenos | Aislamiento por trabajador + roles en capa de aplicación (RLS como defensa en profundidad, pendiente de activar en runtime) |
+| Acceso no autorizado a registros ajenos | Doble barrera: RLS activa en la BD (rol no privilegiado + claims por sesión) **y** aislamiento self-vs-supervisión en la capa de aplicación |
 | Manipulación de registros | Append-only + hash encadenado + trigger + verificación |
 | Exposición de geolocalización | Cifrado en reposo (clave fuera de BD) + minimización + consentimiento |
 | Fuga por transferencia fuera de UE | Verificación de región UE en arranque y deploy |

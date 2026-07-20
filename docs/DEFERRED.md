@@ -34,8 +34,11 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   es constante en código; debería poder editarse como config del convenio.
 - **Antivirus/escaneo y política de retención/borrado del justificante (Fase 8)** — los
   justificantes subidos no se escanean ni tienen política de borrado documentada.
-- **SEC-04(a): RLS en runtime — MECANISMO IMPLEMENTADO Y PROBADO (2026-07-19), enforcement
-  gated en prod**. Construido tras un flag `RLS_ENFORCE` (por defecto OFF = comportamiento
+- ~~**SEC-04(a): RLS en runtime**~~ **ACTIVA EN PRODUCCIÓN (2026-07-20)**: la app conecta con el
+  rol no-privilegiado `app_rw` (RLS_ENFORCE=true + APP_DATABASE_URL en Railway); RAT/DPIA
+  actualizados a "doble barrera". Runbook: `docs/RLS.md`. Pendiente de higiene: rotar la
+  contraseña de `app_rw` (quedó en el chat de setup) y alinear `SUPABASE_REGION` a eu-west-1.
+  Detalle del mecanismo (2026-07-19): Construido tras un flag `RLS_ENFORCE` (por defecto OFF = comportamiento
   actual). Con ON: la app conecta como rol NO superusuario (`app_database_url`), inyecta los
   claims del JWT por sesión, y `app.uid()`/`app.role()` (migración 0016) hacen que las políticas
   de time_record/record_correction/absence/absence_document gaten de verdad; jobs/migraciones/seed
