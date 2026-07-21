@@ -1,9 +1,9 @@
 # RLS en runtime (SEC-04a) — estado y activación
 
 > **ACTIVA EN PRODUCCIÓN desde 2026-07-20.** La app web conecta como el rol `app_rw`
-> (no superusuario) con `RLS_ENFORCE=true`. Pendiente de higiene: rotar la contraseña de
-> `app_rw` (ver §"Notas") y alinear `SUPABASE_REGION`. Lo que sigue documenta el diseño y el
-> procedimiento (para replicar en otro entorno o auditar).
+> (no superusuario) con `RLS_ENFORCE=true`. Higiene completada (2026-07-21): contraseña de
+> `app_rw` rotada y `SUPABASE_REGION` alineada a eu-west-1. Lo que sigue documenta el diseño y
+> el procedimiento (para replicar en otro entorno o auditar).
 
 ## Qué hay implementado
 

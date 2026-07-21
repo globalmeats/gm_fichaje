@@ -73,10 +73,10 @@ firmado con cada uno a nombre de Global Meats S.L.U.
 
 | Encargado | Rol | Ubicación | DPA |
 |---|---|---|---|
-| **Supabase** | Alojamiento de la base de datos (PostgreSQL) | UE (`eu-west-1`, Irlanda) | Solicitado 16/07/2026; pendiente de confirmar/archivar |
-| **Railway** | Hosting/cómputo de la aplicación (procesa los datos en memoria) | UE (`europe-west4`) | **Pendiente** de verificar y archivar |
-| **Cloudflare** | Proxy/CDN delante de la app (ve IP y tráfico, incluidos PIN en tránsito) | UE | **Pendiente** (Fase 3 del go-live) |
-| **Cloudflare R2** | Almacena los **backups cifrados** de toda la BD | UE (bucket con jurisdicción European Union) | **Pendiente**; los dumps viajan cifrados (Fernet) antes de salir de la app |
+| **Supabase** | Alojamiento de la base de datos (PostgreSQL) | UE (`eu-west-1`, Irlanda) | Verificado/archivado (2026-07-21) |
+| **Railway** | Hosting/cómputo de la aplicación (procesa los datos en memoria) | UE (`europe-west4`) | Verificado/archivado (2026-07-21) |
+| **Cloudflare R2** | Almacena los **backups cifrados** de toda la BD | UE (bucket con jurisdicción European Union) | Archivado (2026-07-21); los dumps viajan cifrados (Fernet) antes de salir de la app |
+| **Cloudflare (proxy/CDN)** | Delante de la app (ve IP y tráfico) | UE | Se activa en la Fase 3; cubierto por el mismo DPA de Cloudflare |
 
 > Los backups a R2 contienen una copia de todas las categorías de datos (incluidas las del
 > art. 9): van cifrados en origen con clave que vive solo en el entorno de la app, nunca en R2.

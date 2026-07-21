@@ -10,7 +10,8 @@ Remediación ejecutada por Claude Fable 5. Suite completa en verde (**243 tests*
 | ✅ **Arreglado (código + tests)** | SEC-01, BUG-01, SEC-05, TEST-01, BUG-02, BUG-03, BUG-06, SEC-03, SEC-06, SEC-07, SEC-08, BUG-04, SEC-09, SEC-10, SEC-12, BUG-07, BUG-08, BUG-09, CMP-06 |
 | ✅ **Arreglado (documental)** | CMP-01, CMP-02, CMP-05 — RAT/DPIA actualizados |
 | ✅ **Arreglado (código, más allá del informe original)** | BUG-05 (escaneos O(N) acotados, verificado sin cambio de resultados), **SEC-04(a) RLS ACTIVA en producción (2026-07-20)**: rol no-privilegiado + claims por sesión + políticas completas; suite verde en ambos modos + prueba de bloqueo cruzado a nivel de BD. RAT/DPIA reflejan la doble barrera (ver `docs/RLS.md`) |
-| ⏸️ **Diferido — requiere decisión humana / riesgo** | OPS-01 monitorización del backup (operativo), CMP-03/CMP-04 (criterio laboralista/DPO), SEC-02 rate-limiting (se cubre en Fase 3 con Cloudflare), SEC-11 (`--forwarded-allow-ips`: no tocar sin los rangos reales del proxy, Fase 3) |
+| ✅ **Operativo (go-live 2026-07-21)** | OPS-01 backup diario a R2 en marcha y monitorizado |
+| ⏸️ **Diferido — requiere decisión humana / riesgo** | CMP-03/CMP-04 (criterio laboralista/DPO), SEC-02 rate-limiting (se cubre en Fase 3 con Cloudflare), SEC-11 (`--forwarded-allow-ips`: no tocar sin los rangos reales del proxy, Fase 3) |
 
 Los diferidos están registrados en `docs/DEFERRED.md`. Lo que sigue es el informe original.
 

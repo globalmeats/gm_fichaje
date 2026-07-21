@@ -36,8 +36,8 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   justificantes subidos no se escanean ni tienen política de borrado documentada.
 - ~~**SEC-04(a): RLS en runtime**~~ **ACTIVA EN PRODUCCIÓN (2026-07-20)**: la app conecta con el
   rol no-privilegiado `app_rw` (RLS_ENFORCE=true + APP_DATABASE_URL en Railway); RAT/DPIA
-  actualizados a "doble barrera". Runbook: `docs/RLS.md`. Pendiente de higiene: rotar la
-  contraseña de `app_rw` (quedó en el chat de setup) y alinear `SUPABASE_REGION` a eu-west-1.
+  actualizados a "doble barrera". Runbook: `docs/RLS.md`. Higiene post-golive **completada
+  (2026-07-21)**: contraseña de `app_rw` rotada y `SUPABASE_REGION` alineada a eu-west-1.
   Detalle del mecanismo (2026-07-19): Construido tras un flag `RLS_ENFORCE` (por defecto OFF = comportamiento
   actual). Con ON: la app conecta como rol NO superusuario (`app_database_url`), inyecta los
   claims del JWT por sesión, y `app.uid()`/`app.role()` (migración 0016) hacen que las políticas
@@ -69,9 +69,9 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   6. **Pruebas**: recorrer cada rol contra cada endpoint (incl. que un empleado NO ve ajenos ni
      por RLS ni por app), los dos jobs, y el ciclo backup→restore, antes de dar por buena la
      activación. Objetivo: misma funcionalidad, con la RLS como segunda muralla real.
-- **OPS-01: monitorización del backup diario (auditoría 2026-07)** — la conservación de 4 años
-  depende del cron a R2; falta una alerta si un día no aparece backup nuevo (o el objeto más
-  reciente supera ~26 h). Operativo, no código de la app. Alternativa: subir a Supabase Pro.
+- ~~**OPS-01: monitorización del backup diario (auditoría 2026-07)**~~ **RESUELTO (go-live
+  2026-07-21)**: backup diario a R2 confirmado en marcha y con monitorización operativa. Revisar
+  periódicamente que el objeto más reciente en `daily/` es del día. Alternativa de fondo: Supabase Pro.
 - **BUG-05: escaneos O(N) del histórico por fichaje (auditoría 2026-07)** — `_alert_if_annual_cap`
   y `annual_status` cargan todos los `time_record`. Optimización pendiente (acotar por ventana),
   omitida ahora para no arriesgar el cómputo en jornadas que cruzan la frontera de año.
@@ -94,20 +94,15 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   apilan, botón de fichar a ancho completo, y guarda `overflow-x:hidden`. Verificado a 500px y
   1100px con capturas (Chrome headless clampa el viewport a 500 mín.; a 500 `bodyScrollWidth`=
   viewport, sin overflow). 243 tests verde, sin tocar comportamiento. Ver `docs/UI-RESPONSIVE.md`.
-- **Supabase plan Free: backup propio obligatorio (go-live, 15/07/2026)** — el proyecto de
-  producción arranca en plan Free (sin backups gestionados). Mitigación comprometida para la
-  Fase 2 del go-live: `pg_dump` programado (cron en Railway), cifrado, con destino en
-  almacenamiento UE; documentar destino y retención en el RAT. La conservación de 4 años
-  (regla de oro nº 4) no está garantizada sin esto. Reconsiderar upgrade a Pro cuando haya
-  presupuesto: elimina esta pieza y añade backups diarios gestionados.
-- **Reset de esquema antes del go-live (go-live, 15/07/2026)** — durante la preparación
-  corrió una suite de pytest contra el proyecto Supabase de producción (antes de fijar la
-  regla "tests solo contra Postgres local"). Como los triggers de inmutabilidad impiden
-  limpiar residuos por la vía normal, el último paso antes de meter datos reales es: drop
-  del esquema + `python -m app.db.migrate` desde cero + recrear el admin (`scripts.seed_admin`).
-  Los tests van SIEMPRE contra el Postgres local de test (puerto 55432), nunca contra prod.
-- **Supabase plan Free: keep-alive anti-pausa (go-live, 15/07/2026)** — Free pausa proyectos
-  tras ~7 días "sin actividad" y la conexión directa por pooler (asyncpg) puede no contar
-  como actividad. Mitigación: keep-alive periódico en la Fase 2 y vigilancia del estado del
-  proyecto. La Data API queda desactivada a propósito (minimización: la app no usa
-  supabase-js; solo Postgres directo).
+- ~~**Supabase plan Free: backup propio (go-live)**~~ **RESUELTO (2026-07-21)**: `app.jobs.backup`
+  (cron en Railway) sube el dump cifrado a R2 (jurisdicción UE), confirmado en marcha en el
+  go-live. Reconsiderar upgrade a Pro cuando haya presupuesto (elimina backup propio + keep-alive
+  + riesgo de pausa). Pendiente menor de documentación: reflejar destino/retención del backup en el RAT.
+- ~~**Reset de esquema antes del go-live**~~ **HECHO (go-live 2026-07-21)**: se reinició el esquema
+  (drop → migraciones desde cero → grants de RLS → `seed_admin`) y se sembró el admin real antes de
+  dar de alta a la plantilla; los residuos de pruebas quedaron eliminados. Regla permanente: los
+  tests van SIEMPRE contra el Postgres local de test (55432), nunca contra prod.
+- **Supabase plan Free: keep-alive anti-pausa (go-live)** — Free pausa proyectos tras ~7 días
+  "sin actividad"; el cron de backup diario genera actividad real (hace de keep-alive). **Vigilar
+  las primeras semanas** que el proyecto no se pausa. Data API desactivada a propósito
+  (minimización). Reconsiderar Pro para eliminar el riesgo.
