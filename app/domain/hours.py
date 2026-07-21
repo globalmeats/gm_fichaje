@@ -108,12 +108,26 @@ def is_pause_computable(policy: _Policy) -> bool:
     return policy.pause_computable_default
 
 
+def journey_coherent(journey: Journey) -> bool:
+    """False si la jornada tiene una incoherencia temporal (p. ej. tras una corrección a medias):
+    salida antes de entrada, o una pausa/desplazamiento que termina antes de empezar."""
+    if journey.check_out is not None and journey.check_out < journey.check_in:
+        return False
+    if any(end < start for start, end in journey.pauses):
+        return False
+    if any(end < start for start, end, _ in journey.travels):
+        return False
+    return True
+
+
 def journey_effective(journey: Journey, policy: _Policy) -> timedelta:
     """Tiempo efectivo de una jornada cerrada.
 
     Jornada abierta (sin check_out) → no computa (incidencia): devuelve 0.
+    Jornada temporalmente INCOHERENTE (ver `journey_coherent`) → 0 hasta que se corrija: no se
+    computan tiempos negativos/absurdos; la discrepancia se señala aparte (banner).
     """
-    if journey.check_out is None:
+    if journey.check_out is None or not journey_coherent(journey):
         return timedelta(0)
 
     effective = journey.check_out - journey.check_in

@@ -78,5 +78,8 @@ class ExportReport(BaseModel):
     vacation_days_remaining: float = 0
     # Ausencias del periodo (vacaciones/bajas/permisos). Sin binario del justificante.
     absences: list[ExportAbsenceRow] = []
+    # Incoherencias temporales pendientes de corregir (REQ-16): p. ej. salida antes de entrada
+    # tras una corrección a medias. Vacío = todo coherente.
+    discrepancies: list[str] = []
     generated_at: datetime
     records: list[ExportRecordRow]

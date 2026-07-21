@@ -20,8 +20,16 @@ from app.audit.chain import append_event
 from app.core.config import settings
 from app.core.crypto import encrypt_geo
 from app.core.time import iso8601, madrid_today_start, utc_now
-from app.db.models import Absence, AuditAlert, TimePolicy, TimeRecord, Worker
+from app.db.models import (
+    Absence,
+    AuditAlert,
+    RecordCorrection,
+    TimePolicy,
+    TimeRecord,
+    Worker,
+)
 from app.domain.absences import vacation_balance, vacation_days_taken
+from app.domain.corrections import apply_corrections
 from app.domain.desconexion import is_off_hours
 from app.domain.hours import (
     annual_status,
@@ -98,7 +106,14 @@ async def _alert_if_annual_cap(db: AsyncSession, worker: Worker | None) -> None:
             .order_by(TimeRecord.seq.asc())
         )
     ).scalars().all()
-    status_ = annual_status(list(records), worker, policy, now)
+    corrections = (
+        await db.execute(
+            select(RecordCorrection).where(RecordCorrection.worker_id == worker.id)
+        )
+    ).scalars().all()
+    status_ = annual_status(
+        apply_corrections(list(records), list(corrections)), worker, policy, now
+    )
     if not (status_["exceeded"] or status_["near"]):
         return
 
@@ -341,12 +356,21 @@ async def summary(
             .order_by(TimeRecord.seq.asc())
         )
     ).scalars().all()
+    # REQ-16: computar sobre la vista efectiva (con correcciones aplicadas).
+    corrections = (
+        await db.execute(
+            select(RecordCorrection)
+            .where(RecordCorrection.worker_id == worker_id)
+            .order_by(RecordCorrection.seq.asc())
+        )
+    ).scalars().all()
+    effective = apply_corrections(list(records), list(corrections))
 
     now = utc_now()
     day_start = madrid_today_start(now)  # "hoy" = día local de Madrid (BUG-02)
 
     today_journeys: list[JourneySummary] = []
-    for j in reconstruct_journeys(records):
+    for j in reconstruct_journeys(effective):
         if j.check_in < day_start:
             continue
         bruto = (j.check_out - j.check_in) if j.check_out else None
@@ -369,11 +393,11 @@ async def summary(
             )
         )
 
-    period = period_summary(records, policy, now)
+    period = period_summary(effective, policy, now)
 
     # Estado anual del tope de jornada (REQ-27) y saldo de vacaciones (REQ-18/28) propios.
     worker = await db.get(Worker, worker_id)
-    annual = annual_status(list(records), worker, policy, now)
+    annual = annual_status(effective, worker, policy, now)
     absences = (
         await db.execute(select(Absence).where(Absence.worker_id == worker_id))
     ).scalars().all()

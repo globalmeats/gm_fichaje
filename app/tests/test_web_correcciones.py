@@ -31,9 +31,20 @@ async def test_admin_registros_offers_correction(client, db):
     target = await create_employee(db, "Hugo", "Mas", role="empleado")
     await append_event(db, target.id, "check_in", modalidad="presencial", source="web")
 
-    r = await client.get(f"/admin/registros?worker_id={target.id}")
+    r = await client.get(
+        f"/admin/registros?worker_id={target.id}&start=2020-01-01&end=2035-12-31"
+    )
     assert r.status_code == 200
     assert "Corregir" in r.text
+
+
+async def test_admin_registros_sin_fechas_avisa(client, db):
+    """Sin fechas seleccionadas, muestra un banner amable (no un 422 JSON)."""
+    await _session(client, db, "admin")
+    target = await create_employee(db, "Sara", "Diaz", role="empleado")
+    r = await client.get(f"/admin/registros?worker_id={target.id}")
+    assert r.status_code == 200
+    assert "Selecciona las fechas" in r.text
 
 
 async def test_admin_creates_correction(client, db):
@@ -56,6 +67,35 @@ async def test_admin_creates_correction(client, db):
     # El original se muestra junto a su corrección (audit-trail §3).
     assert "teletrabajo" in r.text
     assert "Error de selección" in r.text
+
+
+async def test_correccion_incoherente_avisa_y_confirma(client, db):
+    """Corregir el check_out a antes del check_in avisa antes de sellar; con confirm se sella
+    y queda el banner de discrepancia (REQ-16)."""
+    await _session(client, db, "admin")
+    target = await create_employee(db, "Eva", "Roca", role="empleado")
+    await append_event(db, target.id, "check_in")  # ~ahora
+    co = await append_event(db, target.id, "check_out")  # ~ahora + un instante
+
+    # Mover el check_out a mucho antes del check_in → incoherencia.
+    payload = {
+        "record_id": str(co.id),
+        "worker_id": str(target.id),
+        "field": "occurred_at",
+        "corrected_value": "2020-01-01T00:00:00.000Z",
+        "reason": "prueba incoherencia",
+    }
+    r = await client.post("/admin/correccion", data=payload)
+    assert r.status_code == 200
+    assert "incoherencia" in r.text.lower()
+    assert "Proceder de todos modos" in r.text
+    assert "Corrección registrada" not in r.text  # NO se ha sellado
+
+    # Confirmar: se sella y aparece el banner persistente de discrepancia.
+    r2 = await client.post("/admin/correccion", data={**payload, "confirm": "true"})
+    assert r2.status_code == 200
+    assert "Corrección registrada" in r2.text
+    assert "Discrepancia temporal" in r2.text
 
 
 async def test_correction_invalid_value_shows_error(client, db):

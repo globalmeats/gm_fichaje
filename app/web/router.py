@@ -13,6 +13,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_cls
 from datetime import time as time_cls
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -22,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.absences import vacation_balance_for
 from app.api.auth import authenticate, change_worker_pin
-from app.api.corrections import apply_correction
+from app.api.corrections import _validate_corrected_value, apply_correction
 from app.api.deps import can_manage_account, get_db
 from app.api.export import OVERSIGHT_ROLES, load_report
 from app.api.fichaje import _alert_if_off_hours, _ordered_event_types, _state_validator
@@ -46,11 +47,13 @@ from app.db.models import (
     Absence,
     AbsenceDocument,
     AuditAlert,
+    RecordCorrection,
     TimePolicy,
     TimeRecord,
     Worker,
 )
 from app.domain.absences import absence_hours, overlaps
+from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import to_csv, to_pdf
 from app.domain.hours import (
     annual_status,
@@ -153,7 +156,14 @@ async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
         )
     ).scalars().all()
     policy = await db.get(TimePolicy, 1)
-    journeys = _journey_rows(reconstruct_journeys(list(events)), policy)
+    # REQ-16: desglose de hoy sobre la vista efectiva (con correcciones aplicadas).
+    corr = (
+        await db.execute(
+            select(RecordCorrection).where(RecordCorrection.worker_id == worker_id)
+        )
+    ).scalars().all()
+    effective_today = apply_corrections(list(events), list(corr))
+    journeys = _journey_rows(reconstruct_journeys(effective_today), policy)
 
     since = None
     if state is not State.IDLE:
@@ -593,20 +603,43 @@ async def admin_reset_pin(
 @router.get("/admin/registros")
 async def admin_registros(
     request: Request,
-    worker_id: uuid.UUID | None = None,
-    start: date_cls | None = None,
-    end: date_cls | None = None,
+    worker_id: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
     claims: dict = Depends(require_web_role(*OVERSIGHT_ROLES)),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    report = await load_report(db, claims, worker_id, start, end) if worker_id else None
+    # Params como texto (los <select>/<input> vacíos envían ""): se parsean a mano para dar un
+    # aviso amable en vez del volcado JSON 422 de FastAPI.
+    error = None
+    report = None
+    wid = None
+    if worker_id:
+        try:
+            wid = uuid.UUID(worker_id)
+        except ValueError:
+            error = "Trabajador no válido."
+    if wid is not None and error is None:
+        if not start or not end:
+            error = "Selecciona las fechas (desde y hasta) para ver los registros."
+        else:
+            try:
+                start_d = date_cls.fromisoformat(start)
+                end_d = date_cls.fromisoformat(end)
+            except ValueError:
+                error = "Fechas no válidas."
+            else:
+                report = await load_report(db, claims, wid, start_d, end_d)
     return _render(
         request,
         "admin/registros.html",
         claims=claims,
         workers=await _all_workers(db),
         report=report,
-        selected=str(worker_id) if worker_id else "",
+        error=error,
+        selected=worker_id or "",
+        start=start or "",
+        end=end or "",
         can_correct=claims["role"] in CORRECTABLE_ROLES,
         correctable_fields=CORRECTABLE_FIELDS,
         event_types=EVENT_TYPES,
@@ -622,37 +655,80 @@ async def admin_correccion(
     field: str = Form(...),
     corrected_value: str = Form(...),
     reason: str = Form(...),
+    confirm: str | None = Form(None),
     claims: dict = Depends(require_web_role("admin", "supervisor")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     error = None
     message = None
-    try:
-        await apply_correction(
-            db,
-            record_id=record_id,
-            field=field,
-            corrected_value=corrected_value,
-            reason=reason,
-            author_id=uuid.UUID(claims["worker_id"]),
+    warn: list[str] = []
+    pending = None
+
+    def _ctx(**extra):
+        return dict(
+            claims=claims,
+            can_correct=True,
+            correctable_fields=CORRECTABLE_FIELDS,
+            event_types=EVENT_TYPES,
+            modalidades=MODALIDADES,
+            **extra,
         )
-        message = "Corrección registrada."
+
+    try:
+        # 1) Valida el valor sin sellar (misma red que la API).
+        _validate_corrected_value(field, corrected_value)
+
+        # 2) Simula la corrección sobre la vista efectiva y detecta si INTRODUCE incoherencia.
+        #    Si la introduce y no viene confirmada, se avisa y NO se sella (REQ-16).
+        if confirm != "true":
+            recs = (
+                await db.execute(
+                    select(TimeRecord)
+                    .where(TimeRecord.worker_id == worker_id)
+                    .order_by(TimeRecord.seq.asc())
+                )
+            ).scalars().all()
+            existing = (
+                await db.execute(
+                    select(RecordCorrection)
+                    .where(RecordCorrection.worker_id == worker_id)
+                    .order_by(RecordCorrection.seq.asc())
+                )
+            ).scalars().all()
+            pending_corr = SimpleNamespace(
+                original_record_id=record_id, field=field,
+                corrected_value=corrected_value, seq=2**31,
+            )
+            before = set(discrepancies(apply_corrections(list(recs), list(existing))))
+            after = discrepancies(apply_corrections(list(recs), [*existing, pending_corr]))
+            new = [d for d in after if d not in before]
+            if new:
+                warn = new
+                pending = {
+                    "record_id": str(record_id), "worker_id": str(worker_id),
+                    "field": field, "corrected_value": corrected_value, "reason": reason,
+                }
+
+        # 3) Sella (si no hay que avisar, o si viene confirmada).
+        if not warn:
+            await apply_correction(
+                db,
+                record_id=record_id,
+                field=field,
+                corrected_value=corrected_value,
+                reason=reason,
+                author_id=uuid.UUID(claims["worker_id"]),
+            )
+            message = "Corrección registrada."
     except HTTPException as exc:
         await db.rollback()
         error = exc.detail
 
     report = await load_report(db, claims, worker_id, None, None)
     return _render(
-        request,
-        "_registros.html",
-        claims=claims,
-        report=report,
-        can_correct=True,
-        correctable_fields=CORRECTABLE_FIELDS,
-        event_types=EVENT_TYPES,
-        modalidades=MODALIDADES,
-        error=error,
-        message=message,
+        request, "_registros.html",
+        report=report, error=error, message=message, warn=warn, pending=pending,
+        **_ctx(),
     )
 
 

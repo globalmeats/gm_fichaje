@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.core.time import utc_now
-from app.db.models import TimePolicy, TimeRecord, Worker
+from app.db.models import RecordCorrection, TimePolicy, TimeRecord, Worker
+from app.domain.corrections import apply_corrections
 from app.domain.hours import classify_overtime
 from app.schemas.report import OvertimeReport
 
@@ -64,11 +65,20 @@ async def overtime(
             .order_by(TimeRecord.seq.asc())
         )
     ).scalars().all()
+    # REQ-16: computar sobre la vista efectiva (con correcciones aplicadas).
+    corrections = (
+        await db.execute(
+            select(RecordCorrection)
+            .where(RecordCorrection.worker_id == target)
+            .order_by(RecordCorrection.seq.asc())
+        )
+    ).scalars().all()
+    effective = apply_corrections(list(records), list(corrections))
 
     # BUG-06: pasar relation_type para clasificar el exceso de un tiempo parcial como
     # complementarias (no extra), coherente con el export.
     relation_type = worker.relation_type if worker is not None else "ordinaria"
-    out = classify_overtime(records, policy, reference, relation_type=relation_type)
+    out = classify_overtime(effective, policy, reference, relation_type=relation_type)
     return OvertimeReport(
         worker_id=target,
         period=out["period"],

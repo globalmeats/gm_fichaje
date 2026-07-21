@@ -48,6 +48,7 @@ def build_report(
     absences: list[ExportAbsenceRow] | None = None,
     pausa_min: int = 0,
     flexible_schedule: bool = False,
+    discrepancies: list[str] | None = None,
 ) -> ExportReport:
     """Ensambla el `ExportReport` (identificación + detalle + correcciones + totales).
 
@@ -115,6 +116,7 @@ def build_report(
         vacation_days_taken=vacation["taken"] if vacation else 0,
         vacation_days_remaining=vacation["remaining"] if vacation else 0,
         absences=absences or [],
+        discrepancies=discrepancies or [],
         generated_at=utc_now(),
         records=rows,
     )

@@ -29,10 +29,12 @@ from app.db.models import (
     Worker,
 )
 from app.domain.absences import absence_hours, vacation_balance, vacation_days_taken
+from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import build_report, to_csv, to_pdf
 from app.domain.hours import (
     annual_status,
     classify_overtime,
+    journey_coherent,
     period_window,
     reconstruct_journeys,
 )
@@ -89,21 +91,27 @@ async def load_report(
     ).scalars().all()
 
     now = utc_now()
+    # REQ-16: el cómputo usa la vista EFECTIVA (registros con sus correcciones aplicadas), no el
+    # original sellado; así una corrección de `occurred_at`/`event_type`/… cambia los totales.
+    effective = apply_corrections(list(records), list(corrections))
     summary = classify_overtime(
-        records, policy, now, relation_type=worker.relation_type
+        effective, policy, now, relation_type=worker.relation_type
     )
 
     # Tope anual del convenio (REQ-27) sobre horas efectivas del año natural.
-    annual = annual_status(list(records), worker, policy, now)
+    annual = annual_status(effective, worker, policy, now)
 
     # Pausa total del periodo (descanso de comida visible), sobre la misma ventana del resumen.
     p_start, p_end = period_window(now, policy.computation_period)
     pausa_total = timedelta(0)
-    for j in reconstruct_journeys(list(records)):
-        if j.check_out is not None and p_start <= j.check_in < p_end:
+    for j in reconstruct_journeys(effective):
+        if j.check_out is not None and journey_coherent(j) and p_start <= j.check_in < p_end:
             for ps, pe in j.pauses:
                 pausa_total += pe - ps
     pausa_min = int(pausa_total.total_seconds() // 60)
+
+    # Incoherencias temporales (p. ej. corrección a medias): se muestran como banner.
+    discrepancias = discrepancies(effective)
 
     # Ausencias del trabajador: saldo de vacaciones del año + lista de ausencias del rango.
     all_absences = (
@@ -157,6 +165,7 @@ async def load_report(
         absences=absence_rows,
         pausa_min=pausa_min,
         flexible_schedule=worker.flexible_schedule,
+        discrepancies=discrepancias,
     )
 
 

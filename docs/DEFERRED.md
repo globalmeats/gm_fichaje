@@ -7,6 +7,15 @@ reconsiderar los pendientes en el momento oportuno (ver `CLAUDE.md`). Una entrad
   tiempo de desplazamiento que no computa; confirmar con abogado laboralista contra el ET.
 - **Compensación de horas extra, abono vs descanso (Fase 3)** — hoy marcado "pending"; el registro
   inmutable/sellado de esa decisión queda diferido a una fase posterior.
+- ~~**Las correcciones no afectaban al cómputo (bug de prod, 2026-07-21)**~~ **RESUELTO**: el
+  cálculo de horas leía el `time_record` original e ignoraba las correcciones (una corrección de
+  `occurred_at` no cambiaba los totales). Ahora `app/domain/corrections.py::apply_corrections`
+  superpone la última corrección de cada campo (vista efectiva) y se aplica en todos los caminos
+  de cálculo (export/mis-registros, /summary, tope anual, /reports/overtime, widget de hoy). El
+  original sigue sellado. Jornada temporalmente incoherente (corrección a medias) computa 0 y se
+  señala con banner; el submit avisa antes de sellar si introduce incoherencia y exige confirmar.
+- ~~**/admin/registros: 422 JSON si faltan fechas (2026-07-21)**~~ **RESUELTO**: params tolerantes
+  a vacío + banner "Selecciona las fechas" en vez del volcado de error; se exigen desde y hasta.
 - ~~**REQ-26 horas complementarias (Fase 3)** — diferido hasta modelar `relation_type` (contratos a
   tiempo parcial) en el trabajador.~~ **RESUELTO (Fase 6)**: `worker.relation_type` incluye
   `tiempo_parcial` y `app/domain/hours.py::classify_overtime` etiqueta el exceso como

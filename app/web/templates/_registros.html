@@ -5,6 +5,36 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if message %}<p class="ok">{{ message }}</p>{% endif %}
 
+  {# Aviso ANTES de sellar: la corrección dejaría el histórico incoherente. Se puede proceder
+     (quedará marcado) o cancelar y ajustar el orden de las correcciones. #}
+  {% if warn %}
+    <div class="card banner-warn">
+      <strong>⚠️ Esta corrección dejará una incoherencia temporal:</strong>
+      <ul>{% for d in warn %}<li>{{ d }}</li>{% endfor %}</ul>
+      <p class="muted">Es normal si estás corrigiendo un rango por partes. Puedes proceder
+        (quedará señalado hasta que lo termines de arreglar) o cancelar y ajustar.</p>
+      <form hx-post="/admin/correccion" hx-target="#registros" hx-swap="outerHTML"
+            style="display:inline">
+        <input type="hidden" name="record_id" value="{{ pending.record_id }}">
+        <input type="hidden" name="worker_id" value="{{ pending.worker_id }}">
+        <input type="hidden" name="field" value="{{ pending.field }}">
+        <input type="hidden" name="corrected_value" value="{{ pending.corrected_value }}">
+        <input type="hidden" name="reason" value="{{ pending.reason }}">
+        <input type="hidden" name="confirm" value="true">
+        <button type="submit">Proceder de todos modos</button>
+      </form>
+    </div>
+  {% endif %}
+
+  {# Banner persistente: hay una incoherencia en el histórico efectivo que requiere corrección. #}
+  {% if report and report.discrepancies %}
+    <div class="card banner-warn">
+      <strong>⚠️ Discrepancia temporal — requiere corrección:</strong>
+      <ul>{% for d in report.discrepancies %}<li>{{ d }}</li>{% endfor %}</ul>
+      <p class="muted">Mientras exista, esa jornada computa 0 h.</p>
+    </div>
+  {% endif %}
+
   <div class="card">
     <h2>Totales del periodo ({{ report.period }})</h2>
     <p class="muted">

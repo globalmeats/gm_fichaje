@@ -16,12 +16,16 @@
       {% endfor %}
     </select>
     <label for="start">Desde</label>
-    <input id="start" name="start" type="date">
+    <input id="start" name="start" type="date" value="{{ start }}">
     <label for="end">Hasta</label>
-    <input id="end" name="end" type="date">
+    <input id="end" name="end" type="date" value="{{ end }}">
     <button type="submit">Ver registros</button>
   </form>
 </div>
+
+{% if error %}
+  <div class="card banner-warn"><strong>{{ error }}</strong></div>
+{% endif %}
 
 {% if report %}
   {% if not can_correct %}
