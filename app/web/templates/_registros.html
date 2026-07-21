@@ -159,7 +159,12 @@
                 <td></td>
                 <td colspan="{{ note_span }}" class="muted">
                   ↳ Corrección de <strong>{{ c.field }}</strong> →
-                  "{{ c.corrected_value }}" · motivo: {{ c.reason }}
+                  {% if c.corrected_value_local %}
+                    {{ c.corrected_value_local }} <span class="muted">(hora local; UTC {{ c.corrected_value }})</span>
+                  {% else %}
+                    "{{ c.corrected_value }}"
+                  {% endif %}
+                  · motivo: {{ c.reason }}
                   ({{ c.occurred_at | madrid("%d/%m/%Y %H:%M") }})
                 </td>
               </tr>

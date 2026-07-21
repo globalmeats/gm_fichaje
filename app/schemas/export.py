@@ -33,6 +33,9 @@ class ExportCorrectionRow(BaseModel):
     seq: int
     field: str
     corrected_value: str
+    # Solo para field='occurred_at': el valor corregido formateado en hora local de Madrid,
+    # para mostrarlo en la web sin que el usuario tenga que convertir del UTC. None en el resto.
+    corrected_value_local: str | None = None
     reason: str
     author_id: uuid.UUID
     occurred_at: datetime

@@ -96,6 +96,9 @@ async def test_correccion_incoherente_avisa_y_confirma(client, db):
     assert r2.status_code == 200
     assert "Corrección registrada" in r2.text
     assert "Discrepancia temporal" in r2.text
+    # La anotación muestra la hora LOCAL del valor corregido (01/01/2020 01:00 Madrid = UTC+1).
+    assert "hora local" in r2.text
+    assert "01/01/2020 01:00:00" in r2.text
 
 
 async def test_correction_invalid_value_shows_error(client, db):

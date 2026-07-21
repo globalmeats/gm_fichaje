@@ -11,7 +11,7 @@ from __future__ import annotations
 import csv
 import io
 from collections import defaultdict
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from fpdf import FPDF
@@ -35,6 +35,20 @@ class _Worker(Protocol):
 
 def _minutes(td: timedelta) -> int:
     return int(td.total_seconds() // 60)
+
+
+def _corrected_local(c) -> str | None:
+    """Para una corrección de `occurred_at`, el valor corregido en hora local de Madrid (solo
+    presentación web). Devuelve None para otros campos o si el valor no es una fecha válida."""
+    if c.field != "occurred_at":
+        return None
+    try:
+        dt = datetime.fromisoformat(c.corrected_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return to_madrid(dt).strftime("%d/%m/%Y %H:%M:%S")
 
 
 def build_report(
@@ -72,6 +86,7 @@ def build_report(
                     decrypt_geo(c.corrected_value) or "" if c.field == "geo"
                     else c.corrected_value
                 ),
+                corrected_value_local=_corrected_local(c),
                 reason=c.reason,
                 author_id=c.author_id,
                 occurred_at=c.occurred_at,
