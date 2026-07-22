@@ -36,10 +36,10 @@ async def test_check_in_opens_journey(client, db):
 
 async def test_invalid_transition_shows_message(client, db):
     await _session(client, db)
-    # check_out desde IDLE no es válido: fragmento con el aviso, estado intacto.
+    # check_out desde IDLE no es válido: fragmento con un aviso AMABLE, estado intacto.
     r = await client.post("/fichar/evento", data={"event_type": "check_out"})
     assert r.status_code == 200
-    assert "inválida" in r.text.lower()
+    assert "no es válida en tu estado actual" in r.text
     assert "Sin jornada abierta" in r.text
 
 

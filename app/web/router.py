@@ -332,10 +332,15 @@ async def fichar_evento(
             source="web",
             validate_transition=_state_validator(event_type),
         )
-    except InvalidTransition as exc:
+    except InvalidTransition:
+        # Estado desincronizado (p. ej. otra pestaña, doble clic, o la jornada ya estaba
+        # cerrada): mensaje amable en vez del técnico. El fragmento ya refleja el estado real.
         ctx = await _estado_ctx(db, worker_id)
-        # Fragmento con el mensaje 409 legible (htmx swap a 200 para reflejar el estado real).
-        return _render(request, "_estado.html", claims=claims, error=str(exc), **ctx)
+        friendly = (
+            "Esa acción no es válida en tu estado actual. La pantalla se ha actualizado con "
+            "tu estado real; revisa los botones disponibles y vuelve a intentarlo."
+        )
+        return _render(request, "_estado.html", claims=claims, error=friendly, **ctx)
 
     await _alert_if_off_hours(db, worker_id, record.occurred_at)
 
