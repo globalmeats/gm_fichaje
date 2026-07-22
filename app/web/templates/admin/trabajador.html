@@ -7,7 +7,7 @@
   <p class="error">Trabajador no encontrado.</p>
   <p><a href="/admin/export">Volver</a></p>
 {% else %}
-  {% if message %}<p class="ok">{{ message }}</p>{% endif %}
+  {% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
   <p class="muted">{{ worker.code }} · {{ worker.first_name }} {{ worker.last_name }}
     ({{ worker.role }} · {{ worker.relation_type }})</p>
 

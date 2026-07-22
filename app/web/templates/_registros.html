@@ -2,8 +2,8 @@
    Muestra SIEMPRE el original junto a sus correcciones, nunca solo el valor corregido.
    Si `can_correct` (solo admin/supervisor en /admin/registros), cada fila ofrece corregir. #}
 <div id="registros">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if message %}<p class="ok">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
+  {% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
 
   {# Aviso ANTES de sellar: la corrección dejaría el histórico incoherente. Se puede proceder
      (quedará marcado) o cancelar y ajustar el orden de las correcciones. #}

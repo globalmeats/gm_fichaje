@@ -7,7 +7,7 @@
     {% if forced %}Tu PIN es temporal: debes cambiarlo antes de poder fichar.{% endif %}
     El PIN es personal e intransferible. Elige 6 dígitos no triviales.
   </p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
   <form method="post" action="/cambiar-pin">
     <label for="current_pin">PIN actual</label>
     <input id="current_pin" name="current_pin" type="password" inputmode="numeric"

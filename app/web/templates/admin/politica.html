@@ -2,8 +2,8 @@
 {% block title %}Política de tiempo — Administración{% endblock %}
 {% block content %}
 <h1>Política de tiempo</h1>
-{% if message %}<p class="ok">{{ message }}</p>{% endif %}
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
+{% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
 
 <div class="card">
   <form method="post" action="/admin/politica">

@@ -194,6 +194,9 @@ td:last-child, td.mono, .num{ font-family:var(--font-mono); font-variant-numeric
 /* ---- Alpine: oculta hasta inicializar ---- */
 [x-cloak]{ display:none !important; }
 
+/* ---- Auto-cierre de avisos-flash (autohide.js) ---- */
+.autohide-out{ opacity:0; transition:opacity .4s ease; }
+
 /* ---- Responsive (móvil-first en los ajustes: base ya vale a 360px) ---- */
 
 /* Móvil (hasta 600px) */

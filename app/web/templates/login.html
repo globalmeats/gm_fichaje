@@ -4,7 +4,7 @@
 <div class="card" x-data="{ pin: '' }">
   <h1>Acceso</h1>
   <p class="muted">Introduce tu código de empleado y tu PIN de 6 dígitos.</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
   <form method="post" action="/login">
     <label for="employee_code">Código de empleado</label>
     <input id="employee_code" name="employee_code" autocomplete="username"

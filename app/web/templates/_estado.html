@@ -15,8 +15,8 @@
   "travel_end": "Terminar desplazamiento"
 } %}
 <div id="estado" class="card">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if message %}<p class="ok">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
+  {% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
 
   {% set state_pill = {"ABIERTA": "pill-warn", "EN_PAUSA": "pill-warn",
                        "EN_DESPLAZAMIENTO": "pill-warn"} %}

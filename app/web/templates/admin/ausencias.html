@@ -4,8 +4,8 @@
 <h1>Ausencias (vacaciones, bajas y permisos)</h1>
 <p class="muted">Alta y gestión solo admin/gestora. El trabajador consulta lo suyo en «Mis ausencias».</p>
 
-{% if message %}<p class="ok">{{ message }}</p>{% endif %}
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
+{% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
 
 <div class="card" x-data="{ tipo: 'vacaciones', porHoras: false }">
   <h2>Registrar ausencia</h2>
