@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Calendario de vacaciones {{ year }} — Global Meats{% endblock %}
+{% block content %}
+<h1>Calendario de vacaciones {{ year }}</h1>
+<p class="muted">
+  Solo vacaciones aprobadas. Los días con dos o más personas se dividen en franjas de color.
+  Los festivos de la Comunidad de Madrid van marcados.
+  <a href="/calendario?year={{ year - 1 }}">← {{ year - 1 }}</a> ·
+  <a href="/calendario?year={{ year + 1 }}">{{ year + 1 }} →</a>
+</p>
+
+{# Leyenda: color por persona + días usados / restantes. #}
+<div class="card">
+  <div class="table-scroll"><table>
+    <thead><tr><th></th><th>Trabajador</th><th>Disfrutados</th><th>Restantes</th></tr></thead>
+    <tbody>
+      {% for w in legend %}
+        <tr>
+          <td><span class="cal-swatch" style="background:{{ w.color }}"></span></td>
+          <td>{{ w.name }} <span class="muted">· {{ w.code }}</span></td>
+          <td>{{ w.taken }}</td>
+          <td>{{ "%.1f"|format(w.remaining) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="cal-grid">
+  {% for m in months %}
+    <div class="cal-month">
+      <h3>{{ m.name }}</h3>
+      <table class="cal-table">
+        <thead>
+          <tr><th>Lu</th><th>Ma</th><th>Mi</th><th>Ju</th><th>Vi</th><th>Sá</th><th>Do</th></tr>
+        </thead>
+        <tbody>
+          {% for week in m.weeks %}
+            <tr>
+              {% for d in week %}
+                {% if d.day is none %}
+                  <td class="cal-empty"></td>
+                {% else %}
+                  <td class="cal-day{% if d.weekend %} cal-weekend{% endif %}{% if d.festivo %} cal-festivo{% endif %}"
+                      {% if d.background %}style="background:{{ d.background }}; color:#fff"{% endif %}
+                      {% if d.festivo %}title="{{ d.festivo }}"{% endif %}>{{ d.day }}</td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+</div>
+
+{# Lista de festivos del año (Comunidad de Madrid). #}
+<div class="card">
+  <h2>Festivos {{ year }} (Comunidad de Madrid)</h2>
+  <div class="table-scroll"><table>
+    <tbody>
+      {% for d, name in festivos %}
+        <tr><td class="mono">{{ d.strftime("%d/%m/%Y") }}</td><td>{{ name }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

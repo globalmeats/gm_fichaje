@@ -32,7 +32,7 @@ from app.audit.verify import verify_all
 from app.core.crypto import decrypt_blob, encrypt_blob
 from app.core.logging import client_ip, log_event
 from app.core.security import create_access_token, generate_pin, hash_pin
-from app.core.time import madrid_today_start, utc_now
+from app.core.time import madrid_date, madrid_today_start, utc_now
 from app.core.uploads import content_disposition, sniff_matches
 from app.db.models import (
     ABSENCE_TYPES,
@@ -53,7 +53,8 @@ from app.db.models import (
     TimeRecord,
     Worker,
 )
-from app.domain.absences import absence_hours, overlaps
+from app.domain.absences import absence_hours, overlaps, vacation_days_taken
+from app.domain.calendar import build_year, worker_color
 from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import to_csv, to_pdf
 from app.domain.hours import (
@@ -62,6 +63,7 @@ from app.domain.hours import (
     journey_effective,
     reconstruct_journeys,
 )
+from app.domain.schedule import effective_vacation_days
 from app.domain.state_machine import (
     InvalidTransition,
     State,
@@ -1183,6 +1185,59 @@ async def mis_ausencias_cancelar(
     ctx = await _mis_ausencias_ctx(db, worker_id)
     return _render(
         request, "mis_ausencias.html", claims=claims, error=error, message=message, **ctx
+    )
+
+
+# --- Calendario anual de vacaciones (REQ-28) — visible por TODOS --------------------
+# Solo VACACIONES aprobadas (nunca bajas/permisos: datos sensibles) + festivos de Madrid.
+
+
+@router.get("/calendario")
+async def calendario(
+    request: Request,
+    year: int | None = None,
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    yr = year or madrid_date(utc_now()).year
+    y0, y1 = date_cls(yr, 1, 1), date_cls(yr, 12, 31)
+    workers = (await db.execute(select(Worker).order_by(Worker.code))).scalars().all()
+    policy = await db.get(TimePolicy, 1)
+
+    color_by_worker: dict[str, str] = {}
+    vacations_by_worker: dict[str, list[tuple]] = {}
+    legend: list[dict] = []
+    for i, w in enumerate(workers):
+        color = worker_color(i)
+        color_by_worker[str(w.id)] = color
+        approved = (
+            await db.execute(
+                select(Absence).where(
+                    Absence.worker_id == w.id,
+                    Absence.absence_type == "vacaciones",
+                    Absence.status == "aprobada",
+                )
+            )
+        ).scalars().all()
+        ranges = [
+            (a.start_date, a.end_date)
+            for a in approved
+            if a.end_date >= y0 and a.start_date <= y1
+        ]
+        if ranges:
+            vacations_by_worker[str(w.id)] = ranges
+        entitled = effective_vacation_days(w, policy) if policy else 0
+        taken = vacation_days_taken(list(approved), yr)  # solo aprobadas (ya filtrado)
+        legend.append({
+            "code": w.code, "name": f"{w.first_name} {w.last_name}", "color": color,
+            "taken": taken, "entitled": entitled, "remaining": entitled - taken,
+        })
+
+    months, fest = build_year(yr, vacations_by_worker, color_by_worker)
+    return _render(
+        request, "calendario.html", claims=claims,
+        year=yr, months=months, legend=legend,
+        festivos=sorted(fest.items()),
     )
 
 

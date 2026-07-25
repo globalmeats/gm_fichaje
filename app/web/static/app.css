@@ -197,6 +197,25 @@ td:last-child, td.mono, .num{ font-family:var(--font-mono); font-variant-numeric
 /* ---- Auto-cierre de avisos-flash (autohide.js) ---- */
 .autohide-out{ opacity:0; transition:opacity .4s ease; }
 
+/* ---- Calendario anual de vacaciones ---- */
+.cal-swatch{ display:inline-block; width:1em; height:1em; border-radius:2px;
+  border:1px solid var(--line); vertical-align:middle; }
+.cal-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr));
+  gap:1rem; margin:1rem 0; }
+.cal-month{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius);
+  padding:.6rem .7rem; box-shadow:var(--shadow); }
+.cal-month h3{ margin:.1rem 0 .4rem; font-size:.95rem; text-align:center; }
+.cal-table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+.cal-table th{ font-family:var(--font-mono); font-size:.62rem; color:var(--slate-soft);
+  text-transform:uppercase; text-align:center; padding:.15rem 0; border:0; letter-spacing:0; }
+.cal-table td{ text-align:center; font-size:.72rem; padding:.2rem 0; border:0;
+  height:1.5rem; font-variant-numeric:tabular-nums; }
+.cal-day{ border-radius:2px; }
+.cal-weekend{ color:var(--slate-soft); }
+/* Festivo: contorno rojo (seal) sin depender solo del color (accesibilidad). */
+.cal-festivo{ outline:2px solid var(--seal); outline-offset:-2px; font-weight:600; }
+.cal-empty{ background:transparent; }
+
 /* ---- Responsive (móvil-first en los ajustes: base ya vale a 360px) ---- */
 
 /* Móvil (hasta 600px) */
