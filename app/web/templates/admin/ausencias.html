@@ -96,6 +96,15 @@
             <td>{{ a.status }}</td>
             <td>{% if a.justified %}<span class="ok">sí</span>{% else %}no{% endif %}</td>
             <td>
+              {# Solicitudes pendientes: aprobar / rechazar (REQ-28). #}
+              {% if a.status == "pendiente" %}
+                <form method="post" action="/admin/ausencias/{{ a.id }}/aprobar" style="display:inline">
+                  <button type="submit">Aprobar</button>
+                </form>
+                <form method="post" action="/admin/ausencias/{{ a.id }}/rechazar" style="display:inline">
+                  <button type="submit" class="secondary">Rechazar</button>
+                </form>
+              {% endif %}
               {% if row.doc_id %}
                 <a href="/descargar/justificante/{{ a.id }}/{{ row.doc_id }}">descargar</a>
               {% endif %}

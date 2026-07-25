@@ -2,7 +2,32 @@
 {% block title %}Mis ausencias — Fichajes Global Meats{% endblock %}
 {% block content %}
 <h1>Mis ausencias</h1>
-<p class="muted">Consulta tus vacaciones, bajas y permisos. El alta la gestiona administración.</p>
+<p class="muted">Consulta tus vacaciones, bajas y permisos y solicita tus vacaciones.
+  Las bajas y permisos los gestiona administración.</p>
+
+{% if message %}<p class="ok autohide">{{ message }}</p>{% endif %}
+{% if error %}<p class="error autohide">{{ error }}</p>{% endif %}
+
+<div class="card">
+  <h2>Solicitar vacaciones</h2>
+  <p class="muted">La solicitud queda <strong>pendiente</strong> hasta que administración la apruebe.</p>
+  <form method="post" action="/mis-ausencias/solicitar"
+        style="display:flex; gap:1rem; flex-wrap:wrap; align-items:end">
+    <div>
+      <label for="start_date">Desde</label>
+      <input id="start_date" name="start_date" type="date" required>
+    </div>
+    <div>
+      <label for="end_date">Hasta</label>
+      <input id="end_date" name="end_date" type="date" required>
+    </div>
+    <div>
+      <label for="note">Nota (opcional)</label>
+      <input id="note" name="note" maxlength="200">
+    </div>
+    <div><button type="submit">Solicitar</button></div>
+  </form>
+</div>
 
 <div class="card">
   <h2>Saldo de vacaciones {{ balance.year }}</h2>
@@ -39,7 +64,7 @@
     <div class="table-scroll"><table>
       <thead>
         <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
-          <th>Estado</th><th>Justif.</th></tr>
+          <th>Estado</th><th>Justif.</th><th>Acción</th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
@@ -55,6 +80,14 @@
               {% if row.doc_id %}
                 <a href="/descargar/justificante/{{ a.id }}/{{ row.doc_id }}">descargar</a>
               {% elif a.justified %}<span class="ok">sí</span>{% else %}no{% endif %}
+            </td>
+            <td>
+              {# El trabajador puede cancelar su propia solicitud mientras está pendiente. #}
+              {% if a.absence_type == "vacaciones" and a.status == "pendiente" %}
+                <form method="post" action="/mis-ausencias/{{ a.id }}/cancelar" style="display:inline">
+                  <button type="submit" class="secondary">Cancelar</button>
+                </form>
+              {% else %}—{% endif %}
             </td>
           </tr>
         {% endfor %}

@@ -950,6 +950,40 @@ async def admin_ausencias_cancelar(
     return RedirectResponse("/admin/ausencias", status_code=303)
 
 
+@router.post("/admin/ausencias/{absence_id}/aprobar")
+async def admin_ausencias_aprobar(
+    request: Request,
+    absence_id: uuid.UUID,
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Aprueba una solicitud de vacaciones pendiente (REQ-28)."""
+    absence = await db.get(Absence, absence_id)
+    if absence is not None and absence.status == "pendiente":
+        absence.status = "aprobada"
+        absence.verified_by = uuid.UUID(claims["worker_id"])
+        absence.updated_at = utc_now()
+        await db.commit()
+    return RedirectResponse("/admin/ausencias", status_code=303)
+
+
+@router.post("/admin/ausencias/{absence_id}/rechazar")
+async def admin_ausencias_rechazar(
+    request: Request,
+    absence_id: uuid.UUID,
+    claims: dict = Depends(require_web_role("admin", "supervisor")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Rechaza una solicitud de vacaciones pendiente (REQ-28)."""
+    absence = await db.get(Absence, absence_id)
+    if absence is not None and absence.status == "pendiente":
+        absence.status = "rechazada"
+        absence.verified_by = uuid.UUID(claims["worker_id"])
+        absence.updated_at = utc_now()
+        await db.commit()
+    return RedirectResponse("/admin/ausencias", status_code=303)
+
+
 @router.post("/admin/ausencias/{absence_id}/justificante")
 async def admin_ausencias_justificante(
     request: Request,
@@ -1032,13 +1066,8 @@ async def descargar_justificante(
 # --- Portal del trabajador: mis ausencias + saldo de vacaciones (REQ-18/28) ----------
 
 
-@router.get("/mis-ausencias")
-async def mis_ausencias(
-    request: Request,
-    claims: dict = Depends(require_web),
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    worker_id = uuid.UUID(claims["worker_id"])
+async def _mis_ausencias_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
+    """Contexto de la pantalla 'Mis ausencias' (saldo, tope anual, lista)."""
     absences = (
         await db.execute(
             select(Absence)
@@ -1068,13 +1097,92 @@ async def mis_ausencias(
         "near": ann["near"],
         "flexible": worker.flexible_schedule,
     }
+    return {
+        "rows": await _absence_view_rows(db, list(absences)),
+        "balance": balance,
+        "annual": annual,
+    }
+
+
+@router.get("/mis-ausencias")
+async def mis_ausencias(
+    request: Request,
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    worker_id = uuid.UUID(claims["worker_id"])
+    ctx = await _mis_ausencias_ctx(db, worker_id)
+    return _render(request, "mis_ausencias.html", claims=claims, **ctx)
+
+
+@router.post("/mis-ausencias/solicitar")
+async def mis_ausencias_solicitar(
+    request: Request,
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    note: str = Form(""),
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """El trabajador solicita vacaciones (queda pendiente de aprobación por administración)."""
+    worker_id = uuid.UUID(claims["worker_id"])
+    error = None
+    message = None
+    try:
+        sd = date_cls.fromisoformat(start_date)
+        ed = date_cls.fromisoformat(end_date)
+        if ed < sd:
+            raise ValueError("la fecha de fin es anterior a la de inicio")
+    except ValueError as exc:
+        error = f"Fechas no válidas: {exc}."
+    if error is None:
+        existing = (
+            await db.execute(select(Absence).where(Absence.worker_id == worker_id))
+        ).scalars().all()
+        if overlaps(sd, ed, None, None, list(existing)):
+            error = "La solicitud solapa con otra ausencia tuya."
+        else:
+            db.add(
+                Absence(
+                    worker_id=worker_id, absence_type="vacaciones",
+                    start_date=sd, end_date=ed, status="pendiente",
+                    note=note or None, created_by=worker_id,
+                )
+            )
+            await db.commit()
+            message = "Solicitud enviada. Pendiente de aprobación por administración."
+    ctx = await _mis_ausencias_ctx(db, worker_id)
     return _render(
-        request,
-        "mis_ausencias.html",
-        claims=claims,
-        rows=await _absence_view_rows(db, list(absences)),
-        balance=balance,
-        annual=annual,
+        request, "mis_ausencias.html", claims=claims, error=error, message=message, **ctx
+    )
+
+
+@router.post("/mis-ausencias/{absence_id}/cancelar")
+async def mis_ausencias_cancelar(
+    request: Request,
+    absence_id: uuid.UUID,
+    claims: dict = Depends(require_web),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """El trabajador cancela SU propia solicitud de vacaciones mientras está pendiente."""
+    worker_id = uuid.UUID(claims["worker_id"])
+    absence = await db.get(Absence, absence_id)
+    message = error = None
+    if (
+        absence is not None
+        and absence.worker_id == worker_id
+        and absence.absence_type == "vacaciones"
+        and absence.status == "pendiente"
+    ):
+        absence.status = "cancelada"
+        absence.updated_at = utc_now()
+        await db.commit()
+        message = "Solicitud cancelada."
+    else:
+        error = "No se puede cancelar esa solicitud."
+    ctx = await _mis_ausencias_ctx(db, worker_id)
+    return _render(
+        request, "mis_ausencias.html", claims=claims, error=error, message=message, **ctx
     )
 
 
