@@ -39,11 +39,23 @@
     </p>
   {% endif %}
 
+  {% if allowed %}
+    <label for="modalidad-select">Modalidad</label>
+    <select id="modalidad-select" name="modalidad">
+      {% for m in modalidades %}
+        <option value="{{ m }}" {% if m == modalidad_default %}selected{% endif %}>
+          {{ m | modalidad_label }}
+        </option>
+      {% endfor %}
+    </select>
+  {% endif %}
+
   <div>
     {% for ev in allowed %}
+      {# hx-include añade la modalidad elegida al POST del botón (data-event-type lo usa offline.js). #}
       <button data-event-type="{{ ev }}"
               hx-post="/fichar/evento" hx-target="#estado" hx-swap="outerHTML"
-              hx-vals='{"event_type": "{{ ev }}"}'
+              hx-vals='{"event_type": "{{ ev }}"}' hx-include="#modalidad-select"
               {% if ev in ("check_in", "break_start", "travel_start") %}{% else %}class="secondary"{% endif %}>
         {{ btn_labels.get(ev, ev) }}
       </button>

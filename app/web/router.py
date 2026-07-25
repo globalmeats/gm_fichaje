@@ -40,6 +40,7 @@ from app.db.models import (
     EVENT_TYPES,
     JUSTIFICANTE_CONTENT_TYPES,
     MAX_JUSTIFICANTE_BYTES,
+    MODALIDAD_DEFAULT,
     MODALIDADES,
     PERMISO_SUBTYPES,
     RELATION_TYPES,
@@ -184,6 +185,8 @@ async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
         "events": list(events),
         "journeys": journeys,
         "since": since,
+        "modalidades": MODALIDADES,
+        "modalidad_default": MODALIDAD_DEFAULT,
     }
 
 
@@ -317,10 +320,13 @@ async def fichar_estado(
 async def fichar_evento(
     request: Request,
     event_type: str = Form(...),
+    modalidad: str = Form(MODALIDAD_DEFAULT),
     claims: dict = Depends(require_web),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     worker_id = uuid.UUID(claims["worker_id"])
+    if modalidad not in MODALIDADES:  # segunda red: el selector solo ofrece válidas
+        modalidad = MODALIDAD_DEFAULT
 
     # La transición se valida DENTRO del lock de append_event: check + act atómicos (BUG-01).
     try:
@@ -328,7 +334,7 @@ async def fichar_evento(
             db,
             worker_id,
             event_type,
-            modalidad="presencial",
+            modalidad=modalidad,
             source="web",
             validate_transition=_state_validator(event_type),
         )

@@ -65,7 +65,7 @@
               <td>{{ r.seq }}</td>
               <td>{{ r.event_type }}</td>
               <td>{{ r.occurred_at | madrid("%d/%m/%Y %H:%M:%S") }}</td>
-              <td>{{ r.modalidad }}</td>
+              <td>{{ r.modalidad | modalidad_label }}</td>
               <td>{{ r.source }}</td>
               <td>{{ r.geo or "—" }}</td>
               {% if can_correct %}
@@ -125,7 +125,7 @@
                       <div>
                         <label>Nueva modalidad</label>
                         <select x-model="mod">
-                          {% for m in modalidades %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+                          {% for m in modalidades %}<option value="{{ m }}">{{ m | modalidad_label }}</option>{% endfor %}
                         </select>
                       </div>
                     </template>

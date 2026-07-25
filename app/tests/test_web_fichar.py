@@ -43,6 +43,27 @@ async def test_invalid_transition_shows_message(client, db):
     assert "Sin jornada abierta" in r.text
 
 
+async def test_modalidad_selector_y_registro(client, db):
+    """El selector de modalidad aparece y el fichaje guarda la modalidad elegida."""
+    import uuid as _uuid
+
+    from sqlalchemy import select as _select
+
+    from app.db.models import TimeRecord
+
+    w = await _session(client, db)
+    r = await client.get("/fichar")
+    assert "Modalidad" in r.text and "A distancia" in r.text  # etiquetas visibles
+
+    await client.post("/fichar/evento", data={"event_type": "check_in", "modalidad": "movil"})
+    rec = (
+        await db.execute(
+            _select(TimeRecord).where(TimeRecord.worker_id == _uuid.UUID(w.id))
+        )
+    ).scalar_one()
+    assert rec.modalidad == "movil"  # valor interno; se muestra como "A distancia"
+
+
 async def test_full_sequence(client, db):
     await _session(client, db)
     r = await client.post("/fichar/evento", data={"event_type": "check_in"})

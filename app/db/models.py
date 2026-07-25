@@ -41,6 +41,11 @@ EVENT_TYPES = (
     "travel_end",
 )
 MODALIDADES = ("presencial", "teletrabajo", "movil")
+# Etiquetas de presentación. Los VALORES internos no se renombran: la modalidad va sellada en
+# el hash de time_record (inmutable), así que renombrarlos rompería la cadena. Solo cambia lo
+# que ve el usuario: presencial→Oficina, movil→A distancia.
+MODALIDAD_LABELS = {"presencial": "Oficina", "teletrabajo": "Teletrabajo", "movil": "A distancia"}
+MODALIDAD_DEFAULT = "presencial"  # "Oficina"
 SOURCES = ("web", "kiosk", "mobile", "offline_sync")
 
 # Tipo de relación laboral / ámbito de la obligación de registro (REQ-11). 'alta_direccion'

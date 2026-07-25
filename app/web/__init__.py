@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from app.core.time import to_madrid
+from app.db.models import MODALIDAD_LABELS
 
 _BASE = Path(__file__).resolve().parent
 TEMPLATES_DIR = str(_BASE / "templates")
@@ -24,3 +25,7 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.filters["madrid"] = (
     lambda dt, fmt="%d/%m/%Y %H:%M:%S": to_madrid(dt).strftime(fmt) if dt else ""
 )
+
+# Etiqueta de presentación de la modalidad (Oficina / Teletrabajo / A distancia). El valor
+# interno sellado no cambia; solo lo que ve el usuario.
+templates.env.filters["modalidad_label"] = lambda v: MODALIDAD_LABELS.get(v, v)
