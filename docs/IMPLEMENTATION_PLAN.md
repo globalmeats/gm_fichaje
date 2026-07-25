@@ -265,7 +265,7 @@ de usuario, no solo de API.
 
 La gestora necesita configurar la jornada de cada trabajador (no solo la global), controlar el
 tope anual del convenio (1760 h) y registrar ausencias (vacaciones, bajas y permisos) con su
-justificante. Plan detallado en `docs/plan-fase8-gestora.md`.
+justificante.
 
 ## Requisitos que toca
 
@@ -338,3 +338,46 @@ Railway de forma reproducible y observable.
 - Borrado físico de `time_record` (diferido; la retención solo marca elegibles).
 - Agregador de logs externo / APM (stdout basta para Railway).
 3. Commit por el usuario.
+
+# Fase 10 — Peticiones de la oficina: modalidad, desplazamiento por trabajador y vacaciones autoservicio
+
+## Contexto
+
+Tras el go-live, la oficina pidió cuatro mejoras concretas (WhatsApp + Excel, 24/07/2026).
+Ninguna toca el sellado de `time_record`: la modalidad ya forma parte del hash (se conservan los
+valores internos `presencial/teletrabajo/movil` y solo se reetiquetan a Oficina/Teletrabajo/A
+distancia). Migraciones `0017` (columna `worker.travel_enabled`) y `0018` (políticas RLS del flujo
+de vacaciones y del calendario compartido).
+
+## Qué entra
+
+- **Selector de modalidad al fichar** (REQ-06) — desplegable Oficina (por defecto) / Teletrabajo /
+  A distancia en la pantalla de fichar; el valor viaja con el evento y queda sellado. Etiquetas vía
+  `MODALIDAD_LABELS`; valores internos intactos por inmutabilidad.
+- **Desplazamiento activable por trabajador** (REQ-09) — flag `worker.travel_enabled`; los botones
+  de desplazamiento solo aparecen a quien lo tenga habilitado, con guarda de servidor. Editable en
+  alta y en la ficha del trabajador.
+- **Vacaciones en autoservicio** (REQ-28) — el trabajador **solicita** sus vacaciones (quedan
+  `pendiente`, con chequeo de solapamiento) y puede cancelar su solicitud; la admin **aprueba /
+  rechaza** y sigue pudiendo crearlas directamente. Bajo RLS: `absence_self_request_insert` y
+  `absence_self_cancel_update` acotan al propio trabajador y le impiden autoaprobarse.
+- **Calendario anual de vacaciones** (REQ-28) — página `/calendario` visible por **todos** los
+  roles: rejilla SSR de 12 meses, un color por trabajador, **celda partida** cuando coinciden dos o
+  más personas, y **festivos de la Comunidad de Madrid** automáticos por año (librería `holidays`).
+  Muestra **solo vacaciones aprobadas**; nunca bajas ni permisos (dato de salud). Bajo RLS,
+  `absence_vacaciones_public_select` hace legibles intraempresa solo las vacaciones aprobadas.
+
+## Criterios de aceptación
+
+- Al fichar se elige modalidad (Oficina por defecto) y queda sellada en el registro.
+- Solo los trabajadores con `travel_enabled` ven/usan el desplazamiento; el resto recibe un aviso.
+- Un trabajador solicita vacaciones y las ve `pendiente`; la admin las aprueba y aparecen en el
+  calendario; un trabajador no puede aprobar/rechazar (RLS + rol).
+- El calendario lo ve cualquier rol, parte la celda en solapes, marca y lista los festivos de
+  Madrid del año, y no muestra bajas.
+- `ruff check .` limpio · `pytest -q` verde (en modo normal y con `RLS_ENFORCE=true`).
+
+## Verificación
+
+1. `python -m app.db.migrate` (0017/0018) · `ruff check .` · `pytest -q` (normal y RLS).
+2. Commit por el usuario (push final reservado al usuario).
