@@ -43,6 +43,28 @@ async def test_invalid_transition_shows_message(client, db):
     assert "Sin jornada abierta" in r.text
 
 
+async def test_desplazamiento_solo_si_habilitado(client, db):
+    """Los botones de desplazamiento solo aparecen (y solo se aceptan) si el trabajador lo tiene."""
+    import uuid as _uuid
+
+    from app.db.models import Worker
+
+    w = await _session(client, db)  # travel_enabled=False por defecto
+    await client.post("/fichar/evento", data={"event_type": "check_in"})  # ABIERTA
+    r = await client.get("/fichar")
+    assert "Iniciar desplazamiento" not in r.text  # botón oculto
+    # Guarda de servidor: aunque se fuerce el POST, se rechaza.
+    r = await client.post("/fichar/evento", data={"event_type": "travel_start"})
+    assert "no está habilitado" in r.text
+
+    # Con el flag activado, sí aparece.
+    worker = await db.get(Worker, _uuid.UUID(w.id))
+    worker.travel_enabled = True
+    await db.commit()
+    r = await client.get("/fichar")
+    assert "Iniciar desplazamiento" in r.text
+
+
 async def test_modalidad_selector_y_registro(client, db):
     """El selector de modalidad aparece y el fichaje guarda la modalidad elegida."""
     import uuid as _uuid

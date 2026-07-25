@@ -29,6 +29,10 @@
         {% if worker.geo_consent %}checked{% endif %}>
         Consentimiento de geolocalización</label>
 
+      <label><input type="checkbox" name="travel_enabled" value="true" style="width:auto"
+        {% if worker.travel_enabled %}checked{% endif %}>
+        Requiere desplazamiento (trabaja fuera de la oficina durante la jornada)</label>
+
       <div style="margin-top:1rem"><button type="submit">Guardar jornada</button></div>
     </form>
   </div>

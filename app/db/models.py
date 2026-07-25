@@ -169,6 +169,11 @@ class Worker(Base):
     flexible_schedule: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # ¿Se le ofrecen los botones de desplazamiento al fichar? (REQ-01) Solo quienes trabajan
+    # fuera de la oficina durante la jornada. Activable/desactivable en ajustes.
+    travel_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
 
 class TimeRecord(Base):

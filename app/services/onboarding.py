@@ -43,6 +43,7 @@ async def create_employee(
     weekly_hours: float | None = None,
     annual_hours_cap: float | None = None,
     flexible_schedule: bool = False,
+    travel_enabled: bool = False,
 ) -> CreatedWorker:
     """Crea un trabajador. Reintenta con el siguiente código si la UNIQUE choca."""
     pin = generate_pin()
@@ -68,6 +69,7 @@ async def create_employee(
             weekly_hours=weekly_hours,
             annual_hours_cap=annual_hours_cap,
             flexible_schedule=flexible_schedule,
+            travel_enabled=travel_enabled,
         )
         db.add(worker)
         try:

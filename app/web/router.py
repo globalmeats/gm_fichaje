@@ -102,10 +102,16 @@ def _render(
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
-def _allowed_events(state: State) -> list[str]:
-    """Eventos válidos desde `state`, en orden de presentación (reutiliza la máquina de estados)."""
+def _allowed_events(state: State, travel_enabled: bool = False) -> list[str]:
+    """Eventos válidos desde `state`, en orden de presentación (reutiliza la máquina de estados).
+
+    Los eventos de desplazamiento solo se ofrecen si el trabajador los tiene habilitados
+    (REQ-01): no son de uso diario.
+    """
     allowed: list[str] = []
     for ev in EVENT_TYPES:
+        if ev.startswith("travel_") and not travel_enabled:
+            continue
         try:
             next_state(state, ev)
         except InvalidTransition:
@@ -147,6 +153,8 @@ async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
     """Estado de jornada + botones válidos + eventos y jornadas de hoy (mismo camino que la API)."""
     # Lectura defensiva: nunca 500 aunque el histórico llegara a ser incoherente (BUG-01).
     state = reconstruct_state(await _ordered_event_types(db, worker_id), strict=False)
+    worker = await db.get(Worker, worker_id)
+    travel_enabled = bool(worker and worker.travel_enabled)
 
     day_start = madrid_today_start(utc_now())  # "hoy" = día local de Madrid (BUG-02)
     events = (
@@ -181,7 +189,7 @@ async def _estado_ctx(db: AsyncSession, worker_id: uuid.UUID) -> dict:
 
     return {
         "state": state.value,
-        "allowed": _allowed_events(state),
+        "allowed": _allowed_events(state, travel_enabled),
         "events": list(events),
         "journeys": journeys,
         "since": since,
@@ -328,6 +336,16 @@ async def fichar_evento(
     if modalidad not in MODALIDADES:  # segunda red: el selector solo ofrece válidas
         modalidad = MODALIDAD_DEFAULT
 
+    # Guarda de servidor (REQ-01): el desplazamiento solo si el trabajador lo tiene habilitado.
+    if event_type.startswith("travel_"):
+        worker = await db.get(Worker, worker_id)
+        if not (worker and worker.travel_enabled):
+            ctx = await _estado_ctx(db, worker_id)
+            return _render(
+                request, "_estado.html", claims=claims,
+                error="El desplazamiento no está habilitado para tu usuario.", **ctx,
+            )
+
     # La transición se valida DENTRO del lock de append_event: check + act atómicos (BUG-01).
     try:
         record = await append_event(
@@ -469,6 +487,7 @@ async def admin_alta_submit(
     weekly_hours: str = Form(""),
     annual_hours_cap: str = Form(""),
     flexible_schedule: bool = Form(False),
+    travel_enabled: bool = Form(False),
     claims: dict = Depends(require_web_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -497,6 +516,7 @@ async def admin_alta_submit(
         weekly_hours=float(weekly_hours) if weekly_hours.strip() else None,
         annual_hours_cap=float(annual_hours_cap) if annual_hours_cap.strip() else None,
         flexible_schedule=flexible_schedule,
+        travel_enabled=travel_enabled,
     )
     return _render(
         request,
@@ -767,6 +787,7 @@ async def admin_trabajador_submit(
     annual_hours_cap: str = Form(""),
     flexible_schedule: bool = Form(False),
     geo_consent: bool = Form(False),
+    travel_enabled: bool = Form(False),
     claims: dict = Depends(require_web_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
@@ -777,6 +798,7 @@ async def admin_trabajador_submit(
     worker.annual_hours_cap = float(annual_hours_cap) if annual_hours_cap.strip() else None
     worker.flexible_schedule = flexible_schedule
     worker.geo_consent = geo_consent
+    worker.travel_enabled = travel_enabled
     await db.commit()
     await db.refresh(worker)
     return _render(
