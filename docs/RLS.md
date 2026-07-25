@@ -60,5 +60,6 @@ RLS_ENFORCE=true DB_REQUIRE_TLS=false pytest -q
 
 - Al activar, el acceso cruzado devuelve **404** (la RLS oculta la existencia) en vez de 403 —
   más seguro (no filtra existencia). Los tests aceptan ambos.
-- La DPIA/RAT deben actualizarse cuando la RLS pase a estar ACTIVA en producción (hoy dicen que
-  el control efectivo es la capa de aplicación con la RLS pendiente de activar).
+- La DPIA y el RAT ya reflejan la RLS **activa** en producción (doble barrera: RLS en la BD +
+  aislamiento en la capa de aplicación). Ver `docs/compliance/DPIA.md` y
+  `docs/compliance/registro-actividades-tratamiento.md`.
