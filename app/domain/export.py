@@ -218,75 +218,118 @@ def _ascii(text: str) -> str:
     return text.encode("latin-1", "replace").decode("latin-1")
 
 
+def _hm(minutes: int) -> str:
+    """Minutos -> 'Xh YYm' legible por humanos."""
+    minutes = int(minutes)
+    sign = "-" if minutes < 0 else ""
+    minutes = abs(minutes)
+    return f"{sign}{minutes // 60}h {minutes % 60:02d}m"
+
+
+def _num(value: float) -> str:
+    """Número compacto (sin decimales innecesarios) para las tablas."""
+    return f"{value:g}"
+
+
+def _section(pdf: FPDF, title: str) -> None:
+    """Encabezado de sección + deja la fuente lista para la tabla siguiente."""
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, _ascii(title), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+
+
 def to_pdf(report: ExportReport) -> bytes:
-    """Serializa el informe a PDF (fpdf2). Devuelve bytes (`%PDF` al inicio)."""
+    """Serializa el informe a PDF legible por humanos, con tablas (fpdf2).
+
+    Devuelve bytes (`%PDF` al inicio). El CSV sigue siendo el formato máquina/verificable;
+    este PDF prioriza la lectura por una persona (gestora, Inspección): horas en formato
+    Xh YYm y horas en hora local de Madrid.
+    """
     pdf = FPDF(orientation="L", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.set_title("Informe de jornada - Global Meats")
     pdf.add_page()
 
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 8, _ascii("Informe de jornada - Global Meats"), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 15)
+    pdf.cell(0, 9, _ascii("Informe de jornada - Global Meats"), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
 
-    pdf.set_font("Helvetica", "", 10)
-    for label, value in [
-        ("Trabajador", report.full_name),
-        ("Codigo empleado", report.employee_code),
-        ("Periodo", f"{report.period} ({iso8601(report.start)} - {iso8601(report.end)})"),
-        (
-            "Totales (min)",
-            f"efectivo {report.efectivo_min} | ordinarias {report.ordinarias_min} | "
-            f"extra {report.extra_min} | complementarias {report.complementarias_min} | "
-            f"jornada {report.ordinary_min} | pausa {report.pausa_min}",
-        ),
-        ("Horario flexible", "si" if report.flexible_schedule else "no"),
-        (
-            "Tope anual (min)",
-            f"trabajado {report.annual_worked_min} | tope {report.annual_cap_min} | "
-            f"restante {report.annual_remaining_min}",
-        ),
-        (
-            "Vacaciones (dias)",
-            f"derecho {report.vacation_days_entitled} | "
-            f"disfrutadas {report.vacation_days_taken} | "
-            f"restantes {report.vacation_days_remaining}",
-        ),
-        ("Generado", iso8601(report.generated_at)),
-    ]:
-        pdf.cell(0, 6, _ascii(f"{label}: {value}"), new_x="LMARGIN", new_y="NEXT")
+    # Identificación (tabla clave/valor, sin cabecera).
+    pdf.set_font("Helvetica", "", 9)
+    with pdf.table(
+        col_widths=(28, 90), first_row_as_headings=False, text_align="LEFT", width=160
+    ) as t:
+        t.row(["Trabajador", _ascii(report.full_name)])
+        t.row(["Codigo empleado", _ascii(report.employee_code)])
+        t.row(["Periodo", _ascii(report.period)])
+        t.row(["Rango", _ascii(f"{_madrid(report.start)} - {_madrid(report.end)}")])
+        t.row(["Generado", _ascii(_madrid(report.generated_at))])
+    pdf.ln(3)
 
+    # Totales del periodo (legible).
+    _section(pdf, "Totales del periodo")
+    with pdf.table(text_align="CENTER") as t:
+        t.row(["Efectivo", "Ordinarias", "Extra", "Complementarias", "Jornada", "Pausa"])
+        t.row([
+            _hm(report.efectivo_min), _hm(report.ordinarias_min), _hm(report.extra_min),
+            _hm(report.complementarias_min), _hm(report.ordinary_min), _hm(report.pausa_min),
+        ])
+    pdf.ln(3)
+
+    # Tope anual de jornada + saldo de vacaciones.
+    _section(pdf, "Tope anual de jornada y vacaciones")
+    with pdf.table(text_align="CENTER") as t:
+        t.row([
+            "Trabajado (año)", "Tope (año)", "Restante (año)",
+            "Vac. derecho", "Vac. disfrut.", "Vac. restan.", "Flexible",
+        ])
+        t.row([
+            _hm(report.annual_worked_min), _hm(report.annual_cap_min),
+            _hm(report.annual_remaining_min), _num(report.vacation_days_entitled),
+            _num(report.vacation_days_taken), _num(report.vacation_days_remaining),
+            "si" if report.flexible_schedule else "no",
+        ])
+    pdf.ln(3)
+
+    # Ausencias del periodo.
     if report.absences:
-        pdf.ln(2)
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.cell(0, 6, _ascii("Ausencias del periodo"), new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Courier", "", 7)
-        for a in report.absences:
-            tramo = (
-                f" {a.start_time}-{a.end_time}" if a.start_time and a.end_time else ""
-            )
-            sub = f"/{a.subtype}" if a.subtype else ""
-            linea = (
-                f"{a.absence_type}{sub} {a.start_date}..{a.end_date}{tramo} "
-                f"[{a.status}] justificada={'si' if a.justified else 'no'}"
-            )
-            pdf.cell(0, 4, _ascii(linea), new_x="LMARGIN", new_y="NEXT")
+        _section(pdf, "Ausencias del periodo")
+        with pdf.table(text_align="LEFT") as t:
+            t.row(["Tipo", "Subtipo", "Inicio", "Fin", "Tramo", "Estado", "Justif.", "Horas"])
+            for a in report.absences:
+                tramo = (
+                    f"{a.start_time}-{a.end_time}" if a.start_time and a.end_time else "-"
+                )
+                t.row([
+                    a.absence_type, a.subtype or "-", a.start_date.isoformat(),
+                    a.end_date.isoformat(), tramo, a.status,
+                    "si" if a.justified else "no",
+                    f"{a.hours:.2f}" if a.hours is not None else "-",
+                ])
+        pdf.ln(3)
 
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(0, 6, _ascii("Detalle de eventos (con sellado)"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Courier", "", 7)
-    for r in report.records:
-        line = (
-            f"#{r.seq} {r.event_type} {iso8601(r.occurred_at)} "
-            f"(Madrid: {_madrid(r.occurred_at)}) {r.modalidad}/{r.source} "
-            f"hash={r.hash[:16]}..."
-        )
-        pdf.cell(0, 4, _ascii(line), new_x="LMARGIN", new_y="NEXT")
-        for c in r.corrections:
-            corr = (
-                f"    correccion #{c.seq} {c.field}={c.corrected_value} "
-                f"motivo='{c.reason}' hash={c.hash[:16]}..."
-            )
-            pdf.cell(0, 4, _ascii(corr), new_x="LMARGIN", new_y="NEXT")
+    # Detalle de eventos con sellado (verificable).
+    _section(pdf, "Detalle de eventos (con sellado)")
+    with pdf.table(text_align="LEFT", col_widths=(8, 22, 46, 22, 16, 40)) as t:
+        t.row(["#", "Evento", "Fecha (Madrid)", "Modalidad", "Origen", "Hash"])
+        for r in report.records:
+            t.row([
+                str(r.seq), r.event_type, _madrid(r.occurred_at), r.modalidad,
+                r.source, _ascii(f"{r.hash[:16]}..."),
+            ])
+    pdf.ln(3)
+
+    # Correcciones (original + corrección, nunca solo el valor corregido).
+    if any(r.corrections for r in report.records):
+        _section(pdf, "Correcciones")
+        with pdf.table(text_align="LEFT", col_widths=(8, 8, 20, 34, 48, 30)) as t:
+            t.row(["Ev.", "#", "Campo", "Valor corregido", "Motivo", "Hash"])
+            for r in report.records:
+                for c in r.corrections:
+                    t.row([
+                        str(r.seq), str(c.seq), c.field, _ascii(str(c.corrected_value)),
+                        _ascii(c.reason), _ascii(f"{c.hash[:16]}..."),
+                    ])
 
     out = pdf.output()
     return bytes(out)

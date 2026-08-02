@@ -50,6 +50,32 @@ async def test_export_pdf_own(client, db):
     assert r.content[:4] == b"%PDF"
 
 
+async def test_export_pdf_with_absences_and_corrections_renders(client, db):
+    """El PDF (tablas) se genera sin error con ausencias y correcciones presentes."""
+    admin = await create_employee(db, "Adm", "Pdf", role="admin")
+    w = await create_employee(db, "Pdf", "Tabla")
+    rec = await append_event(db, uuid.UUID(w.id), "check_in")
+    await append_event(db, uuid.UUID(w.id), "check_out")
+    await append_correction(
+        db, rec, field="modalidad", corrected_value="teletrabajo",
+        reason="Era teletrabajo", author_id=uuid.UUID(admin.id),
+    )
+    await client.post(
+        "/absences",
+        json={
+            "worker_id": w.id, "absence_type": "vacaciones",
+            "start_date": "2026-07-06", "end_date": "2026-07-10",
+        },
+        headers=_auth(create_access_token(admin.id, "admin", pin_temporary=False)),
+    )
+    h = _auth(create_access_token(w.id, "empleado", pin_temporary=False))
+    r = await client.get("/export/records.pdf", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.content[:4] == b"%PDF"
+    assert b"%%EOF" in r.content[-2048:]
+    assert len(r.content) > 1500  # tablas con contenido real
+
+
 async def test_export_includes_corrections(client, db):
     admin = await create_employee(db, "Adm", "Exp", role="admin")
     w = await create_employee(db, "Con", "Corr")
