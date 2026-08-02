@@ -26,18 +26,35 @@ Las tareas ya completadas se retiran de aquí (quedan en el historial de commits
 
 ## Requisitos de la oficina aplazados (24/07/2026)
 
-- **Horario estándar y jornadas (42 h/sem, agosto 30 h intensiva, 07–17 con 2 h de descanso)** —
-  NO se modela por ahora; el control de horas es el **tope anual por empleado** (`annual_hours_cap`,
-  ya implementado). Reconsiderar si hace falta un modelo de horario esperado.
+- **Horario esperado: 40 h/sem vs 42 h/sem (a confirmar)** — se modeló el horario esperado para
+  el control de incumplimientos con **8 h/día laborables (= 40 h/sem)** y **agosto intensiva 6 h/día**
+  (`domain/schedule.expected_daily_min`, valores de convenio en código). Belén citó **42 h/sem**;
+  con 07–17 y 2 h de descanso salen 40 h → confirmar si hay sábados/jornada más larga o si 42 es
+  nominal. El tope anual (1760 h) sigue como control duro.
+- **Horario esperado como configuración editable** — hoy `expected_daily_min` (8 h; agosto 6 h) es
+  constante de convenio en `domain/schedule.py`. Si cambia el convenio o hay que ajustarlo sin
+  deploy, pasarlo a `time_policy` (campos + formulario admin). Relacionado: el "incumplimiento"
+  solo mira la jornada efectiva diaria; no policía el tramo de descanso (puede no ser seguido).
 - **Horario definido de las trabajadoras a tiempo parcial** — se les fija su tope anual por
-  contrato (ya soportado); definir un "horario" queda aplazado (depende del punto anterior).
+  contrato (ya soportado) y quedan **exentas** del control diario de incumplimientos; definir un
+  "horario" propio queda aplazado.
 - **Notificar a quien no ha fichado (10 min tras inicio/salida)** — aplazado. Bloqueado por: (a)
   los trabajadores no tienen email (solo código+PIN), (b) depende del modelo de horario. Opción
   realista futura: aviso a la admin + panel "pendientes de fichar"; canal directo al trabajador
   exigiría teléfono + servicio de pago.
-- **Festivos locales/municipales en el calendario** — los nacionales + Comunidad de Madrid salen
-  automáticos (librería `holidays`); los 2 patronales del municipio cambian cada año y no vienen
-  en la librería → si se quieren, definirlos en una pequeña config anual (falta el municipio).
+- **Festivos locales/municipales** — los nacionales + Comunidad de Madrid salen automáticos
+  (librería `holidays`) y ya **no cuentan como vacaciones** ni en el calendario; los 2 patronales
+  del municipio no vienen en la librería → si se quieren, poblar el enganche `local_holidays`
+  (`calendar.festivos_set` acepta locales) con la lista oficial del municipio (falta el municipio).
+- **Visibilidad/registro de bajas y permisos fuera del calendario público + teletrabajo planificado**
+  — el calendario compartido solo muestra vacaciones aprobadas (las bajas/permisos son dato
+  sensible y no salen, por diseño). Belén quiere que "quede registro" de bajas y de permisos
+  puntuales (p. ej. días de teletrabajo pactados), visible al menos para administración. No hay
+  modelo de "modalidad/teletrabajo planificado a futuro". **A decidir con Estela** antes de tocarlo.
+- **Regla de concurrencia de vacaciones: solo "máx 2 personas"** — implementado el tope de 2
+  personas a la vez (bloqueo al solicitar; el admin puede saltárselo). El matiz "solo el 50% de
+  solape" que mencionó Belén NO se implementó (decisión: de momento solo el tope de 2). El máximo
+  es constante (`absences.MAX_CONCURRENT_VACATIONS`); hacerlo configurable si hiciera falta.
 
 ## Producto / UX pendiente
 

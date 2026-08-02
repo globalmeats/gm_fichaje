@@ -381,3 +381,40 @@ de vacaciones y del calendario compartido).
 
 1. `python -m app.db.migrate` (0017/0018) · `ruff check .` · `pytest -q` (normal y RLS).
 2. Commit por el usuario (push final reservado al usuario).
+
+# Fase 11 — Ajustes de la oficina: festivos, concurrencia de vacaciones y export legible
+
+## Contexto
+
+Feedback de uso real (WhatsApp Belén/Flor, 28/07/2026): festivos contados como vacaciones, tope
+de personas a la vez, export poco legible y control del horario. Sin migraciones (lógica de
+dominio y presentación). El horario esperado se modela como constantes de convenio en
+`domain/schedule.py` (8 h/día; agosto 6 h), pendiente de pasar a config si cambia (ver DEFERRED).
+
+## Qué entra
+
+- **Festivos fuera del cómputo de vacaciones** (REQ-28) — `vacation_days_taken` descuenta además
+  de fines de semana los **festivos** (nacionales + Comunidad de Madrid) recalculados por año con
+  `holidays`; fuente única `calendar.festivos_set`. Un festivo en fin de semana no resta dos veces.
+- **Máximo 2 personas de vacaciones a la vez** (REQ-28) — al solicitar el trabajador, si ya hay 2
+  con vacaciones aprobadas esos días, se bloquea con banner ("consulta con administración") y no se
+  crea. El **admin no queda limitado** (puede crear una tercera). `absences.concurrency_exceeded`.
+- **Export PDF legible con tablas** (REQ-04/19) — el PDF pasa a tablas con rejilla (identificación,
+  totales, tope anual + vacaciones, ausencias, incumplimientos, eventos con sellado, correcciones);
+  horas en `Xh YYm` y hora local de Madrid. El CSV se mantiene como formato máquina/verificable.
+- **Control de incumplimientos del horario esperado** (REQ-27) — `domain/compliance.py` marca los
+  días laborables (no festivos) con jornada efectiva por debajo de lo esperado (8 h; agosto 6 h) y
+  los lista en CSV y PDF. No aplica a horario flexible ni a tiempo parcial.
+
+## Criterios de aceptación
+
+- Una vacación que cubre un festivo cuenta un día menos (bug de Flor resuelto); los findes tampoco.
+- Un tercer trabajador no puede solicitar fechas donde ya hay 2; el admin sí puede crearlas.
+- El PDF sale con tablas legibles por una persona; el CSV no cambia.
+- El export lista los días por debajo del horario esperado; flexibles y tiempo parcial exentos.
+- `ruff check .` limpio · `pytest -q` verde (modo normal y `RLS_ENFORCE=true`).
+
+## Verificación
+
+1. `ruff check .` · `pytest -q` (normal y RLS; 281+1 / 282). Sin migraciones.
+2. Commit por el usuario (push final reservado al usuario).
