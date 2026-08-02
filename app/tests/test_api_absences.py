@@ -28,6 +28,25 @@ def _vac_body(worker_id: str, start: str, end: str) -> dict:
     }
 
 
+async def test_admin_puede_crear_tercera_vacacion_solapada(client, db):
+    """El tope de concurrencia (máx 2) NO bloquea al admin: puede crear la 3ª si lo permite."""
+    admin = await create_employee(db, "Adm", "Conc", role="admin")
+    w1 = await create_employee(db, "Uno", "Conc")
+    w2 = await create_employee(db, "Dos", "Conc")
+    w3 = await create_employee(db, "Tres", "Conc")
+    h = _auth(admin.id, "admin")
+    for w in (w1, w2):
+        r = await client.post(
+            "/absences", json=_vac_body(w.id, "2026-08-10", "2026-08-14"), headers=h
+        )
+        assert r.status_code == 201, r.text
+    # Tercera vacación solapada creada por el admin -> permitida.
+    r = await client.post(
+        "/absences", json=_vac_body(w3.id, "2026-08-11", "2026-08-13"), headers=h
+    )
+    assert r.status_code == 201, r.text
+
+
 async def test_admin_creates_absence(client, db):
     admin = await create_employee(db, "Adm", "Aus", role="admin")
     w = await create_employee(db, "Tra", "Bajador")

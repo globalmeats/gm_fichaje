@@ -130,3 +130,31 @@ def overlaps(
 def covers(absence: _Absence, day: date) -> bool:
     """¿Una ausencia activa cubre `day`? (tiempo justificado: no es fichaje faltante)."""
     return _is_active(absence) and absence.start_date <= day <= absence.end_date
+
+
+# Máximo de personas que pueden estar de vacaciones a la vez (petición de oficina).
+MAX_CONCURRENT_VACATIONS = 2
+
+
+def concurrency_exceeded(
+    start: date,
+    end: date,
+    others: list[tuple[date, date]],
+    *,
+    max_people: int = MAX_CONCURRENT_VACATIONS,
+) -> bool:
+    """¿Añadir una vacación en [start, end] dejaría a más de `max_people` personas a la vez?
+
+    `others` son rangos (inicio, fin) de vacaciones ya existentes de OTROS trabajadores (se
+    asume una entrada por trabajador; los rangos de un mismo trabajador no se solapan entre sí).
+    Se cuenta, día a día del rango solicitado, cuántos otros coinciden; si en algún día ya hay
+    `max_people` o más, el solicitante sería uno de más -> True (conflicto).
+    """
+    if end < start:
+        return False
+    day = start
+    while day <= end:
+        if sum(1 for s, e in others if s <= day <= e) >= max_people:
+            return True
+        day += timedelta(days=1)
+    return False

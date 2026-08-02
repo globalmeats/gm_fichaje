@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from sqlalchemy import select
 
@@ -44,6 +45,51 @@ async def test_solicitud_solapada_se_rechaza(client, db):
         data={"start_date": "2026-08-12", "end_date": "2026-08-16"},
     )
     assert "solapa" in r.text.lower()
+
+
+async def _aprobada(db, worker_id: str, start: date, end: date) -> None:
+    db.add(
+        Absence(
+            worker_id=uuid.UUID(worker_id), absence_type="vacaciones",
+            start_date=start, end_date=end, status="aprobada",
+        )
+    )
+    await db.commit()
+
+
+async def test_solicitud_bloqueada_por_dos_ya_de_vacaciones(client, db):
+    """Si ya hay 2 personas de vacaciones esas fechas, el 3º no puede solicitar (banner)."""
+    w1 = await create_employee(db, "Uno", "Conc")
+    w2 = await create_employee(db, "Dos", "Conc")
+    await _aprobada(db, w1.id, date(2026, 8, 10), date(2026, 8, 14))
+    await _aprobada(db, w2.id, date(2026, 8, 10), date(2026, 8, 14))
+
+    w3 = await create_employee(db, "Tres", "Conc")
+    _login(client, w3.id, "empleado")
+    r = await client.post(
+        "/mis-ausencias/solicitar",
+        data={"start_date": "2026-08-11", "end_date": "2026-08-13"},
+    )
+    assert r.status_code == 200
+    assert "ya hay 2 personas" in r.text
+    assert "administración" in r.text
+    # No se crea nada para el tercero.
+    q = select(Absence).where(Absence.worker_id == uuid.UUID(w3.id))
+    assert (await db.execute(q)).first() is None
+
+
+async def test_tercero_permitido_si_solo_solapa_con_uno(client, db):
+    """Con solo 1 persona esas fechas, un 2º sí puede solicitar (máx 2, no 1)."""
+    w1 = await create_employee(db, "Uni", "Ok")
+    await _aprobada(db, w1.id, date(2026, 8, 10), date(2026, 8, 14))
+    w2 = await create_employee(db, "Bis", "Ok")
+    _login(client, w2.id, "empleado")
+    r = await client.post(
+        "/mis-ausencias/solicitar",
+        data={"start_date": "2026-08-11", "end_date": "2026-08-13"},
+    )
+    assert r.status_code == 200
+    assert "Pendiente de aprobación" in r.text
 
 
 async def test_trabajador_cancela_su_solicitud_pendiente(client, db):

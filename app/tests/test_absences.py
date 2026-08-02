@@ -7,6 +7,7 @@ from datetime import date, time
 
 from app.domain.absences import (
     absence_hours,
+    concurrency_exceeded,
     covers,
     leave_days,
     overlaps,
@@ -162,3 +163,24 @@ def test_covers():
         status="rechazada", start_date=date(2026, 1, 5), end_date=date(2026, 1, 9)
     )
     assert covers(inactive, date(2026, 1, 7)) is False
+
+
+def test_concurrency_exceeded_blocks_third_person():
+    # Dos personas de vacaciones que coinciden el 12-14 de agosto.
+    others = [
+        (date(2026, 8, 10), date(2026, 8, 14)),
+        (date(2026, 8, 12), date(2026, 8, 18)),
+    ]
+    # Un tercero que pide el 13 (donde ya hay 2) -> conflicto.
+    assert concurrency_exceeded(date(2026, 8, 13), date(2026, 8, 13), others) is True
+    # Un tercero que pide solo el 16-17 (donde hay 1) -> permitido.
+    assert concurrency_exceeded(date(2026, 8, 16), date(2026, 8, 17), others) is False
+
+
+def test_concurrency_exceeded_second_person_allowed_and_empty():
+    solo = [(date(2026, 8, 10), date(2026, 8, 14))]
+    # Con 1 persona, un 2º puede coincidir el 100% -> permitido.
+    assert concurrency_exceeded(date(2026, 8, 10), date(2026, 8, 14), solo) is False
+    # Sin nadie más -> permitido; rango invertido -> sin conflicto.
+    assert concurrency_exceeded(date(2026, 8, 10), date(2026, 8, 14), []) is False
+    assert concurrency_exceeded(date(2026, 8, 14), date(2026, 8, 10), solo) is False

@@ -53,7 +53,12 @@ from app.db.models import (
     TimeRecord,
     Worker,
 )
-from app.domain.absences import absence_hours, overlaps, vacation_days_taken
+from app.domain.absences import (
+    absence_hours,
+    concurrency_exceeded,
+    overlaps,
+    vacation_days_taken,
+)
 from app.domain.calendar import build_year, festivos_set, worker_color
 from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import to_csv, to_pdf
@@ -1141,8 +1146,26 @@ async def mis_ausencias_solicitar(
         existing = (
             await db.execute(select(Absence).where(Absence.worker_id == worker_id))
         ).scalars().all()
+        # Vacaciones aprobadas de OTROS trabajadores que solapan el rango (para el tope de
+        # concurrencia). Bajo RLS son legibles por todos (política de vacaciones aprobadas).
+        others = (
+            await db.execute(
+                select(Absence).where(
+                    Absence.worker_id != worker_id,
+                    Absence.absence_type == "vacaciones",
+                    Absence.status == "aprobada",
+                    Absence.start_date <= ed,
+                    Absence.end_date >= sd,
+                )
+            )
+        ).scalars().all()
         if overlaps(sd, ed, None, None, list(existing)):
             error = "La solicitud solapa con otra ausencia tuya."
+        elif concurrency_exceeded(sd, ed, [(a.start_date, a.end_date) for a in others]):
+            error = (
+                "No puedes solicitar estas fechas: ya hay 2 personas de vacaciones esos "
+                "días. Consulta con administración."
+            )
         else:
             db.add(
                 Absence(
