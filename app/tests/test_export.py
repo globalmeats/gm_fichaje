@@ -147,6 +147,8 @@ async def test_export_includes_annual_and_absences(client, db):
     # Sección de ausencias del periodo, sin binario del justificante.
     assert "Ausencias del periodo" in body
     assert "vacaciones" in body
+    # Sección de incumplimientos de horario (control de la gestora), siempre presente.
+    assert "Incumplimientos de horario" in body
 
 
 async def test_portal_my_records(client, db):

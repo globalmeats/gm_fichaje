@@ -8,7 +8,22 @@ la calculen igual.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Protocol
+
+# Horario esperado del convenio (control de cumplimiento de la gestora). Valores estables del
+# convenio (no fechas que varíen por año): jornada estándar de 8 h/día y jornada intensiva de
+# agosto de 30 h/semana (~6 h/día). Si el convenio los cambia, se ajustan aquí.
+STANDARD_DAILY_MIN = 480       # 8 h/día
+INTENSIVE_DAILY_MIN = 360      # agosto: 30 h/semana ≈ 6 h/día
+INTENSIVE_MONTH = 8            # agosto
+
+
+def expected_daily_min(day: date) -> int:
+    """Minutos de jornada efectiva esperados en `day` según el convenio (agosto intensiva)."""
+    if day.month == INTENSIVE_MONTH:
+        return INTENSIVE_DAILY_MIN
+    return STANDARD_DAILY_MIN
 
 
 class _Worker(Protocol):

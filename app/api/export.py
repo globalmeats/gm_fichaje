@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_claims, get_db
 from app.core.logging import log_event
-from app.core.time import utc_now
+from app.core.time import to_madrid, utc_now
 from app.db.models import (
     Absence,
     AbsenceDocument,
@@ -29,6 +29,8 @@ from app.db.models import (
     Worker,
 )
 from app.domain.absences import absence_hours, vacation_balance, vacation_days_taken
+from app.domain.calendar import festivos_set
+from app.domain.compliance import schedule_issues
 from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import build_report, to_csv, to_pdf
 from app.domain.hours import (
@@ -39,7 +41,7 @@ from app.domain.hours import (
     reconstruct_journeys,
 )
 from app.domain.schedule import effective_vacation_days
-from app.schemas.export import ExportAbsenceRow, ExportReport
+from app.schemas.export import ExportAbsenceRow, ExportReport, ExportScheduleIssueRow
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -102,13 +104,28 @@ async def load_report(
     annual = annual_status(effective, worker, policy, now)
 
     # Pausa total del periodo (descanso de comida visible), sobre la misma ventana del resumen.
+    journeys = reconstruct_journeys(effective)
     p_start, p_end = period_window(now, policy.computation_period)
     pausa_total = timedelta(0)
-    for j in reconstruct_journeys(effective):
+    for j in journeys:
         if j.check_out is not None and journey_coherent(j) and p_start <= j.check_in < p_end:
             for ps, pe in j.pauses:
                 pausa_total += pe - ps
     pausa_min = int(pausa_total.total_seconds() // 60)
+
+    # Incumplimientos del horario esperado (control de la gestora): días laborables por debajo de
+    # la jornada. No aplica a flexibles ni a tiempo parcial (su control es el tope del periodo).
+    festivos: set = set()
+    for y in {to_madrid(j.check_in).year for j in journeys if j.check_out is not None}:
+        festivos |= festivos_set(y)
+    issue_rows = [
+        ExportScheduleIssueRow(day=i.day, worked_min=i.worked_min, expected_min=i.expected_min)
+        for i in schedule_issues(
+            journeys, policy, festivos,
+            flexible=worker.flexible_schedule,
+            part_time=worker.relation_type == "tiempo_parcial",
+        )
+    ]
 
     # Incoherencias temporales (p. ej. corrección a medias): se muestran como banner.
     discrepancias = discrepancies(effective)
@@ -163,6 +180,7 @@ async def load_report(
         annual=annual,
         vacation=vacation,
         absences=absence_rows,
+        schedule_issues=issue_rows,
         pausa_min=pausa_min,
         flexible_schedule=worker.flexible_schedule,
         discrepancies=discrepancias,

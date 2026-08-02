@@ -23,6 +23,7 @@ from app.schemas.export import (
     ExportCorrectionRow,
     ExportRecordRow,
     ExportReport,
+    ExportScheduleIssueRow,
 )
 
 
@@ -60,6 +61,7 @@ def build_report(
     annual: dict | None = None,
     vacation: dict | None = None,
     absences: list[ExportAbsenceRow] | None = None,
+    schedule_issues: list[ExportScheduleIssueRow] | None = None,
     pausa_min: int = 0,
     flexible_schedule: bool = False,
     discrepancies: list[str] | None = None,
@@ -131,6 +133,7 @@ def build_report(
         vacation_days_taken=vacation["taken"] if vacation else 0,
         vacation_days_remaining=vacation["remaining"] if vacation else 0,
         absences=absences or [],
+        schedule_issues=schedule_issues or [],
         discrepancies=discrepancies or [],
         generated_at=utc_now(),
         records=rows,
@@ -179,6 +182,17 @@ def to_csv(report: ExportReport) -> str:
              a.hours if a.hours is not None else "",
              "si" if a.has_document else "no"]
         )
+    w.writerow([])
+
+    w.writerow(["# Incumplimientos de horario (jornada por debajo de lo esperado)"])
+    w.writerow(["fecha", "trabajado_min", "esperado_min", "diferencia_min"])
+    if report.schedule_issues:
+        for s in report.schedule_issues:
+            w.writerow(
+                [s.day.isoformat(), s.worked_min, s.expected_min, s.worked_min - s.expected_min]
+            )
+    else:
+        w.writerow(["(ninguno)"])
     w.writerow([])
 
     w.writerow(
@@ -307,6 +321,20 @@ def to_pdf(report: ExportReport) -> bytes:
                     f"{a.hours:.2f}" if a.hours is not None else "-",
                 ])
         pdf.ln(3)
+
+    # Incumplimientos del horario esperado (control de la gestora).
+    _section(pdf, "Incumplimientos de horario (jornada por debajo de lo esperado)")
+    if report.schedule_issues:
+        with pdf.table(text_align="CENTER", col_widths=(30, 24, 24, 24)) as t:
+            t.row(["Fecha", "Trabajado", "Esperado", "Diferencia"])
+            for s in report.schedule_issues:
+                t.row([
+                    s.day.isoformat(), _hm(s.worked_min), _hm(s.expected_min),
+                    _hm(s.worked_min - s.expected_min),
+                ])
+    else:
+        pdf.cell(0, 5, _ascii("Sin incumplimientos en el periodo."), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
 
     # Detalle de eventos con sellado (verificable).
     _section(pdf, "Detalle de eventos (con sellado)")

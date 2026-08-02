@@ -29,6 +29,14 @@ class ExportAbsenceRow(BaseModel):
     has_document: bool = False
 
 
+class ExportScheduleIssueRow(BaseModel):
+    """Un día con jornada efectiva por debajo de la esperada (control de horario)."""
+
+    day: date
+    worked_min: int
+    expected_min: int
+
+
 class ExportCorrectionRow(BaseModel):
     seq: int
     field: str
@@ -81,6 +89,8 @@ class ExportReport(BaseModel):
     vacation_days_remaining: float = 0
     # Ausencias del periodo (vacaciones/bajas/permisos). Sin binario del justificante.
     absences: list[ExportAbsenceRow] = []
+    # Incumplimientos del horario esperado del convenio (días por debajo de la jornada).
+    schedule_issues: list[ExportScheduleIssueRow] = []
     # Incoherencias temporales pendientes de corregir (REQ-16): p. ej. salida antes de entrada
     # tras una corrección a medias. Vacío = todo coherente.
     discrepancies: list[str] = []
