@@ -41,6 +41,22 @@ def test_leave_days_inverted_range_is_zero():
     assert leave_days(date(2026, 1, 9), date(2026, 1, 5)) == 0
 
 
+def test_leave_days_skips_holidays():
+    # Lun 5 a Vie 9 con el mar 6 (Reyes) como festivo -> 4 laborables.
+    festivo = {date(2026, 1, 6)}
+    assert leave_days(date(2026, 1, 5), date(2026, 1, 9), holidays=festivo) == 4
+    # Sin festivos: 5 laborables (comportamiento previo intacto).
+    assert leave_days(date(2026, 1, 5), date(2026, 1, 9)) == 5
+
+
+def test_leave_days_holiday_on_weekend_no_double_discount():
+    # Vie 9 a Lun 12: laborables vie 9 y lun 12 = 2. Un festivo en sábado (10) ya está
+    # excluido por ser finde: no debe restar dos veces.
+    assert (
+        leave_days(date(2026, 1, 9), date(2026, 1, 12), holidays={date(2026, 1, 10)}) == 2
+    )
+
+
 def test_absence_hours_full_day_is_none():
     assert absence_hours(_Absence()) is None
 
@@ -52,7 +68,8 @@ def test_absence_hours_hourly():
 
 def test_vacation_days_taken_only_counts_year_and_active():
     absences = [
-        _Absence(start_date=date(2026, 1, 5), end_date=date(2026, 1, 9)),  # 5 lab
+        # Lun 5 a Vie 9: 5 laborables menos el mar 6 (Reyes, festivo) = 4.
+        _Absence(start_date=date(2026, 1, 5), end_date=date(2026, 1, 9)),
         _Absence(
             absence_type="vacaciones",
             status="cancelada",
@@ -66,14 +83,17 @@ def test_vacation_days_taken_only_counts_year_and_active():
         ),  # baja -> no es vacaciones
         _Absence(start_date=date(2025, 12, 29), end_date=date(2025, 12, 31)),  # otro año
     ]
-    assert vacation_days_taken(absences, 2026) == 5
+    # Por defecto excluye festivos de Madrid del año: el 6-ene (Reyes) no cuenta.
+    assert vacation_days_taken(absences, 2026) == 4
+    # Pasando un conjunto de festivos vacío se puede ver el conteo sin festivos (5 laborables).
+    assert vacation_days_taken(absences, 2026, holidays=set()) == 5
 
 
 def test_vacation_days_taken_clips_to_year_boundary():
     # Rango que cruza fin de año: solo cuenta lo que cae en 2026.
     absences = [_Absence(start_date=date(2025, 12, 29), end_date=date(2026, 1, 2))]
-    # 2026-01-01 (jue, festivo no contemplado) y 2026-01-02 (vie) = 2 laborables.
-    assert vacation_days_taken(absences, 2026) == 2
+    # 2026-01-01 (Año Nuevo, festivo) no cuenta; solo 2026-01-02 (vie) = 1 laborable.
+    assert vacation_days_taken(absences, 2026) == 1
 
 
 def test_vacation_balance():

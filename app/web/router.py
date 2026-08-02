@@ -54,7 +54,7 @@ from app.db.models import (
     Worker,
 )
 from app.domain.absences import absence_hours, overlaps, vacation_days_taken
-from app.domain.calendar import build_year, worker_color
+from app.domain.calendar import build_year, festivos_set, worker_color
 from app.domain.corrections import apply_corrections, discrepancies
 from app.domain.export import to_csv, to_pdf
 from app.domain.hours import (
@@ -1201,6 +1201,7 @@ async def calendario(
 ) -> Response:
     yr = year or madrid_date(utc_now()).year
     y0, y1 = date_cls(yr, 1, 1), date_cls(yr, 12, 31)
+    festivos = festivos_set(yr)  # festivos del año (no cuentan como vacaciones)
     workers = (await db.execute(select(Worker).order_by(Worker.code))).scalars().all()
     policy = await db.get(TimePolicy, 1)
 
@@ -1227,7 +1228,7 @@ async def calendario(
         if ranges:
             vacations_by_worker[str(w.id)] = ranges
         entitled = effective_vacation_days(w, policy) if policy else 0
-        taken = vacation_days_taken(list(approved), yr)  # solo aprobadas (ya filtrado)
+        taken = vacation_days_taken(list(approved), yr, festivos)  # solo aprobadas, sin festivos
         legend.append({
             "code": w.code, "name": f"{w.first_name} {w.last_name}", "color": color,
             "taken": taken, "entitled": entitled, "remaining": entitled - taken,

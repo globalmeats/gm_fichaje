@@ -56,6 +56,25 @@ async def test_calendario_visible_por_empleado(client, db):
     assert "Fiesta de la Comunidad de Madrid" in r.text  # festivo listado
 
 
+async def test_calendario_descuenta_festivos_del_conteo(client, db):
+    """Un festivo dentro del rango de vacaciones NO cuenta como día disfrutado (bug Flor)."""
+    w = await create_employee(db, "Fest", "Ivo")
+    db.add(
+        Absence(
+            worker_id=uuid.UUID(w.id), absence_type="vacaciones",
+            start_date=date(2026, 1, 5), end_date=date(2026, 1, 9), status="aprobada",
+        )
+    )
+    await db.commit()
+    _login(client, w.id, "empleado")
+    r = await client.get("/calendario?year=2026")
+    assert r.status_code == 200
+    # Lun 5 a Vie 9 = 5 laborables, menos el mar 6 (Reyes, festivo) = 4 disfrutados.
+    # El <td> plano (sin clase) solo aparece en la celda "Disfrutados" de la leyenda.
+    assert "<td>4</td>" in r.text
+    assert "<td>5</td>" not in r.text
+
+
 async def test_calendario_solo_muestra_vacaciones_no_bajas(client, db):
     """Una baja (dato de salud) NO debe aparecer en el calendario compartido."""
     w = await create_employee(db, "Cal", "Baja")

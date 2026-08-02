@@ -2,14 +2,17 @@
 
 Una ausencia aprobada justifica que no se fiche ese tiempo (`covers`). Las vacaciones se
 contabilizan en días; los permisos por horas (cita médica) no consumen día de vacaciones sino
-horas justificadas. El calendario de festivos queda fuera de alcance (DEFERRED): `leave_days`
-con `working_only` solo descuenta fines de semana.
+horas justificadas. Las vacaciones descuentan fines de semana y festivos de la Comunidad de
+Madrid (nacionales + autonómicos), que se recalculan solos por año; ver `vacation_days_taken`
+y `app.domain.calendar.festivos_set`.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
+
+from app.domain.calendar import festivos_set
 
 
 class _Absence(Protocol):
@@ -21,17 +24,26 @@ class _Absence(Protocol):
     end_time: time | None
 
 
-def leave_days(start: date, end: date, *, working_only: bool = True) -> int:
+def leave_days(
+    start: date,
+    end: date,
+    *,
+    working_only: bool = True,
+    holidays: set[date] | None = None,
+) -> int:
     """Número de días del rango [start, end] (ambos inclusive).
 
-    `working_only=True` cuenta solo de lunes a viernes (no descuenta festivos: DEFERRED).
+    `working_only=True` cuenta solo de lunes a viernes. `holidays` (si se pasa) excluye además
+    esos días festivos. Un festivo que cae en fin de semana no resta dos veces.
     """
     if end < start:
         return 0
     total = 0
     day = start
     while day <= end:
-        if not working_only or day.weekday() < 5:
+        is_weekend = day.weekday() >= 5
+        is_holiday = holidays is not None and day in holidays
+        if (not working_only or not is_weekend) and not is_holiday:
             total += 1
         day += timedelta(days=1)
     return total
@@ -52,15 +64,23 @@ def _is_active(absence: _Absence) -> bool:
     return absence.status in ("aprobada", "pendiente")
 
 
-def vacation_days_taken(absences: list[_Absence], year: int) -> int:
-    """Días de vacaciones (aprobadas/pendientes) que caen en el año natural dado."""
+def vacation_days_taken(
+    absences: list[_Absence], year: int, holidays: set[date] | None = None
+) -> int:
+    """Días de vacaciones (aprobadas/pendientes) que caen en el año natural dado.
+
+    Excluye fines de semana y festivos. Si `holidays` es None se usan los festivos de la
+    Comunidad de Madrid del año (nacionales + autonómicos), recalculados solos por año.
+    """
+    if holidays is None:
+        holidays = festivos_set(year)
     total = 0
     for a in absences:
         if a.absence_type != "vacaciones" or not _is_active(a):
             continue
         start = max(a.start_date, date(year, 1, 1))
         end = min(a.end_date, date(year, 12, 31))
-        total += leave_days(start, end, working_only=True)
+        total += leave_days(start, end, working_only=True, holidays=holidays)
     return total
 
 

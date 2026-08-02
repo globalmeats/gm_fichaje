@@ -72,6 +72,14 @@ def madrid_holidays(year: int, local: dict[date, str] | None = None) -> dict[dat
     return result
 
 
+def festivos_set(year: int, local: dict[date, str] | None = None) -> set[date]:
+    """Conjunto de fechas festivas (nacionales + Madrid + locales opcionales) del año.
+
+    Fuente de verdad única para el marcado del calendario y el descuento de vacaciones.
+    """
+    return set(madrid_holidays(year, local))
+
+
 def build_year(
     year: int,
     vacations_by_worker: dict[str, list[tuple[date, date]]],
