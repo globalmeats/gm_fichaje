@@ -1,7 +1,7 @@
 """Detección de incumplimientos del horario esperado (petición de la gestora). Lógica pura.
 
 Objetivo: que la gestora vea de un vistazo qué días se trabajó por debajo de la jornada
-esperada del convenio (8 h/día; agosto 6 h). NO aplica a trabajadores con horario flexible
+esperada (8 h/día todo el año, ver `schedule.expected_daily_min`). NO aplica a horario flexible
 (su cómputo se reparte en el periodo pactado, REQ-29) ni a tiempo parcial (su control es el
 tope anual prorrateado, no la jornada diaria). Ignora fines de semana y festivos.
 

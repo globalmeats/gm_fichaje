@@ -11,18 +11,15 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
-# Horario esperado del convenio (control de cumplimiento de la gestora). Valores estables del
-# convenio (no fechas que varíen por año): jornada estándar de 8 h/día y jornada intensiva de
-# agosto de 30 h/semana (~6 h/día). Si el convenio los cambia, se ajustan aquí.
+# Horario esperado (control de cumplimiento de la gestora). Hoy 8 h/día TODOS los días del año,
+# hasta indicación en contrario (p. ej. una futura jornada intensiva de agosto la decidirá legal).
+# Es el único punto a tocar para cambiarlo. La firma acepta `day` para poder reintroducir una
+# jornada distinta por fecha sin cambiar las llamadas.
 STANDARD_DAILY_MIN = 480       # 8 h/día
-INTENSIVE_DAILY_MIN = 360      # agosto: 30 h/semana ≈ 6 h/día
-INTENSIVE_MONTH = 8            # agosto
 
 
 def expected_daily_min(day: date) -> int:
-    """Minutos de jornada efectiva esperados en `day` según el convenio (agosto intensiva)."""
-    if day.month == INTENSIVE_MONTH:
-        return INTENSIVE_DAILY_MIN
+    """Minutos de jornada efectiva esperados en `day`. 8 h/día todo el año (por ahora)."""
     return STANDARD_DAILY_MIN
 
 

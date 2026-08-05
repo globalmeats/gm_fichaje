@@ -388,8 +388,9 @@ de vacaciones y del calendario compartido).
 
 Feedback de uso real (WhatsApp Belén/Flor, 28/07/2026): festivos contados como vacaciones, tope
 de personas a la vez, export poco legible y control del horario. Sin migraciones (lógica de
-dominio y presentación). El horario esperado se modela como constantes de convenio en
-`domain/schedule.py` (8 h/día; agosto 6 h), pendiente de pasar a config si cambia (ver DEFERRED).
+dominio y presentación). El horario esperado se modela como constante en `domain/schedule.py`
+(8 h/día todo el año; agosto intensiva desactivada por decisión del cliente), pendiente de pasar
+a config y de que legal fije 40/42 h y la intensiva (ver DEFERRED).
 
 ## Qué entra
 
@@ -403,8 +404,8 @@ dominio y presentación). El horario esperado se modela como constantes de conve
   totales, tope anual + vacaciones, ausencias, incumplimientos, eventos con sellado, correcciones);
   horas en `Xh YYm` y hora local de Madrid. El CSV se mantiene como formato máquina/verificable.
 - **Control de incumplimientos del horario esperado** (REQ-27) — `domain/compliance.py` marca los
-  días laborables (no festivos) con jornada efectiva por debajo de lo esperado (8 h; agosto 6 h) y
-  los lista en CSV y PDF. No aplica a horario flexible ni a tiempo parcial.
+  días laborables (no festivos) con jornada efectiva por debajo de lo esperado (8 h/día todo el
+  año) y los lista en CSV y PDF. No aplica a horario flexible ni a tiempo parcial.
 
 ## Criterios de aceptación
 

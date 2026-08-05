@@ -23,11 +23,12 @@ def _journey(y: int, m: int, d: int, h_in: int, h_out: int) -> Journey:
     )
 
 
-def test_expected_daily_min_agosto_intensiva():
+def test_expected_daily_min_ocho_horas_todo_el_ano():
     from datetime import date
 
-    assert expected_daily_min(date(2026, 7, 15)) == 480   # estándar 8 h
-    assert expected_daily_min(date(2026, 8, 15)) == 360   # agosto 6 h
+    # 8 h/día todo el año, agosto incluido (hasta que legal indique lo contrario).
+    assert expected_daily_min(date(2026, 7, 15)) == 480
+    assert expected_daily_min(date(2026, 8, 15)) == 480
 
 
 def test_short_day_is_flagged():
@@ -59,11 +60,11 @@ def test_weekend_and_festivo_ignored():
     assert schedule_issues([_journey(2026, 7, 8, 6, 8)], _Policy(), festivos) == []
 
 
-def test_agosto_uses_intensive_expectation():
-    # 6 h un día de agosto -> cumple (esperado 6 h); 5 h -> incumple.
-    assert schedule_issues([_journey(2026, 8, 5, 6, 12)], _Policy(), set()) == []
-    issues = schedule_issues([_journey(2026, 8, 5, 6, 11)], _Policy(), set())
-    assert len(issues) == 1 and issues[0].expected_min == 360
+def test_agosto_tambien_ocho_horas():
+    # Agosto ya no es intensiva: 8 h cumple, 6 h incumple (esperado 8 h).
+    assert schedule_issues([_journey(2026, 8, 5, 6, 14)], _Policy(), set()) == []
+    issues = schedule_issues([_journey(2026, 8, 5, 6, 12)], _Policy(), set())
+    assert len(issues) == 1 and issues[0].expected_min == 480
 
 
 def test_same_day_journeys_are_summed():

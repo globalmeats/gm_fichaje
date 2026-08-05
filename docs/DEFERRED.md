@@ -26,15 +26,17 @@ Las tareas ya completadas se retiran de aquí (quedan en el historial de commits
 
 ## Requisitos de la oficina aplazados (24/07/2026)
 
-- **Horario esperado: 40 h/sem vs 42 h/sem (a confirmar)** — se modeló el horario esperado para
-  el control de incumplimientos con **8 h/día laborables (= 40 h/sem)** y **agosto intensiva 6 h/día**
-  (`domain/schedule.expected_daily_min`, valores de convenio en código). Belén citó **42 h/sem**;
-  con 07–17 y 2 h de descanso salen 40 h → confirmar si hay sábados/jornada más larga o si 42 es
-  nominal. El tope anual (1760 h) sigue como control duro.
-- **Horario esperado como configuración editable** — hoy `expected_daily_min` (8 h; agosto 6 h) es
-  constante de convenio en `domain/schedule.py`. Si cambia el convenio o hay que ajustarlo sin
-  deploy, pasarlo a `time_policy` (campos + formulario admin). Relacionado: el "incumplimiento"
-  solo mira la jornada efectiva diaria; no policía el tramo de descanso (puede no ser seguido).
+- **Horario esperado: 8 h/día todo el año (a revisar con legal)** — el control de incumplimientos
+  usa **8 h/día laborables todos los días del año** (`domain/schedule.expected_daily_min`, un único
+  valor `STANDARD_DAILY_MIN`). Pendiente de legal: (a) si son 40 u **42 h/sem** (Belén citó 42; con
+  07–17 y 2 h de descanso salen 40 → ¿sábados/jornada más larga?), y (b) si agosto vuelve a ser
+  **jornada intensiva** (30 h/sem ≈ 6 h/día) — hoy desactivada por decisión del cliente. El tope
+  anual (1760 h) sigue como control duro.
+- **Horario esperado como configuración editable** — hoy `expected_daily_min` es constante en
+  `domain/schedule.py` (y la firma acepta `day` para reintroducir una jornada por fecha, p. ej.
+  agosto, sin tocar las llamadas). Si hay que ajustarlo sin deploy, pasarlo a `time_policy` (campos
+  + formulario admin). El "incumplimiento" solo mira la jornada efectiva diaria; no policía el
+  tramo de descanso (puede no ser seguido).
 - **Horario definido de las trabajadoras a tiempo parcial** — se les fija su tope anual por
   contrato (ya soportado) y quedan **exentas** del control diario de incumplimientos; definir un
   "horario" propio queda aplazado.
