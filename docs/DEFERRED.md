@@ -89,3 +89,8 @@ Las tareas ya completadas se retiran de aquí (quedan en el historial de commits
 - **BUG-05 (resto)** — se acotaron los escaneos O(N) del estado y del tope anual; el resumen del
   trabajador (`/summary`) y el export siguen cargando todo el histórico del trabajador (aceptable
   a la escala actual). Optimizar solo si crece el volumen.
+- **Confirmación de reset de PIN bloqueada por la CSP** — en `admin/export.html` el botón de
+  reset usa `onsubmit="return confirm(...)"` (JS inline), que la CSP bloquea → el "¿estás seguro?"
+  no aparece y el PIN se resetea sin confirmación. No hay pérdida de datos (el admin ve el PIN
+  nuevo y se puede volver a resetear), por eso queda aplazado. Fix futuro sin JS inline: mover la
+  confirmación a Alpine (`@submit.prevent` + modal/confirm) igual que el filtro de ausencias.
