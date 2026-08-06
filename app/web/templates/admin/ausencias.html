@@ -66,28 +66,36 @@
 
 <div class="card">
   <h2>Ausencias registradas</h2>
-  <form method="get" action="/admin/ausencias">
-    <label for="filtro">Filtrar por trabajador</label>
-    <select id="filtro" name="worker_id" onchange="this.form.submit()">
-      <option value="">— Todos —</option>
-      {% for w in workers %}
-        <option value="{{ w.id }}" {% if selected == w.id|string %}selected{% endif %}>
-          {{ w.code }} · {{ w.first_name }} {{ w.last_name }}
-        </option>
-      {% endfor %}
-    </select>
+  {# Filtro por trabajador. La CSP prohíbe JS inline (onchange=...); el auto-envío al cambiar
+     lo hace Alpine (@change), permitido por la CSP, y el botón «Filtrar» es la red de seguridad
+     si el JS no cargara. #}
+  <form method="get" action="/admin/ausencias" x-data
+        style="display:flex; gap:.5rem; align-items:end; flex-wrap:wrap">
+    <div>
+      <label for="filtro">Filtrar por trabajador</label>
+      <select id="filtro" name="worker_id" @change="$el.form.submit()">
+        <option value="">— Todos —</option>
+        {% for w in workers %}
+          <option value="{{ w.id }}" {% if selected == w.id|string %}selected{% endif %}>
+            {{ w.code }} · {{ w.first_name }} {{ w.last_name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="secondary">Filtrar</button>
   </form>
 
   {% if rows %}
     <div class="table-scroll"><table style="margin-top:1rem">
       <thead>
-        <tr><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
+        <tr><th>Trabajador</th><th>Tipo</th><th>Subtipo</th><th>Inicio</th><th>Fin</th><th>Horas</th>
           <th>Estado</th><th>Justif.</th><th>Acciones</th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
           {% set a = row.a %}
           <tr>
+            <td>{% if row.worker %}<strong>{{ row.worker.code }}</strong> · {{ row.worker.first_name }} {{ row.worker.last_name }}{% else %}—{% endif %}</td>
             <td>{{ a.absence_type }}</td>
             <td>{{ a.subtype or "—" }}</td>
             <td>{{ a.start_date.strftime("%d/%m/%Y") }}{% if a.start_time %} {{ a.start_time.strftime("%H:%M") }}{% endif %}</td>

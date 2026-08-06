@@ -207,6 +207,47 @@ async def test_cancel_absence_web(client, db):
     assert absence.status == "cancelada"
 
 
+async def test_admin_ausencias_filtra_por_trabajador_y_muestra_columna(client, db):
+    """El filtro por trabajador debe aplicar de verdad y la lista mostrar de quién es cada fila.
+
+    Regresión: el desplegable usaba JS inline (bloqueado por la CSP), así que el filtro no se
+    aplicaba y salían las ausencias de TODOS sin poder distinguirlas → se canceló la de otra
+    persona por error.
+    """
+    admin = await create_employee(db, "Adm", "Filt", role="admin")
+    w1 = await create_employee(db, "Uno", "Filt")
+    w2 = await create_employee(db, "Dos", "Filt")
+    await _session(client, "admin", admin.id)
+    year = utc_now().year
+    await client.post(
+        "/admin/ausencias",
+        data={"worker_id": str(w1.id), "absence_type": "vacaciones",
+              "start_date": f"{year}-03-02", "end_date": f"{year}-03-04"},
+    )
+    await client.post(
+        "/admin/ausencias",
+        data={"worker_id": str(w2.id), "absence_type": "vacaciones",
+              "start_date": f"{year}-06-01", "end_date": f"{year}-06-03"},
+    )
+
+    # La tabla identifica al trabajador de cada fila.
+    r = await client.get("/admin/ausencias")
+    assert r.status_code == 200
+    assert "<th>Trabajador</th>" in r.text
+
+    # Filtrando por w1 aparece SU vacación (02/03) y NO la de w2 (01/06). Las fechas solo salen
+    # en las filas de la tabla, no en el desplegable, así que discriminan bien.
+    r = await client.get(f"/admin/ausencias?worker_id={w1.id}")
+    assert r.status_code == 200
+    assert f"02/03/{year}" in r.text
+    assert f"01/06/{year}" not in r.text
+
+    # "Todos" con worker_id vacío (lo que envía el desplegable) NO da 422 y muestra ambas.
+    r = await client.get("/admin/ausencias?worker_id=")
+    assert r.status_code == 200
+    assert f"02/03/{year}" in r.text and f"01/06/{year}" in r.text
+
+
 async def test_portal_mis_ausencias_shows_balance(client, db):
     admin = await create_employee(db, "Adm", "Por", role="admin")
     w = await create_employee(db, "Tra", "Por")

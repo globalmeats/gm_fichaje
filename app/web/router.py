@@ -830,11 +830,21 @@ async def _absence_view_rows(db: AsyncSession, absences: list[Absence]) -> list[
             )
         ).all()
         with_doc = {absence_id: doc_id for absence_id, doc_id in rows}
+    # Trabajador de cada ausencia, para identificar de quién es cada fila en el panel admin
+    # (evita cancelar la de otra persona por error). `worker` sin RLS: tabla de auth.
+    worker_ids = {a.worker_id for a in absences}
+    workers: dict[uuid.UUID, Worker] = {}
+    if worker_ids:
+        wrows = (
+            await db.execute(select(Worker).where(Worker.id.in_(worker_ids)))
+        ).scalars().all()
+        workers = {w.id: w for w in wrows}
     return [
         {
             "a": a,
             "hours": absence_hours(a),
             "doc_id": with_doc.get(a.id),
+            "worker": workers.get(a.worker_id),
         }
         for a in absences
     ]
@@ -843,13 +853,21 @@ async def _absence_view_rows(db: AsyncSession, absences: list[Absence]) -> list[
 @router.get("/admin/ausencias")
 async def admin_ausencias(
     request: Request,
-    worker_id: uuid.UUID | None = None,
+    worker_id: str | None = None,
     claims: dict = Depends(require_web_role("admin", "supervisor")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    # `worker_id` llega como texto del desplegable de filtro ("" = Todos). Parseo tolerante:
+    # una cadena vacía o inválida NO debe dar 422, solo significa "sin filtro".
+    selected_id: uuid.UUID | None = None
+    if worker_id:
+        try:
+            selected_id = uuid.UUID(worker_id)
+        except ValueError:
+            selected_id = None
     query = select(Absence).order_by(Absence.start_date.desc())
-    if worker_id is not None:
-        query = query.where(Absence.worker_id == worker_id)
+    if selected_id is not None:
+        query = query.where(Absence.worker_id == selected_id)
     absences = (await db.execute(query)).scalars().all()
     return _render(
         request,
@@ -857,7 +875,7 @@ async def admin_ausencias(
         claims=claims,
         workers=await _all_workers(db),
         rows=await _absence_view_rows(db, list(absences)),
-        selected=str(worker_id) if worker_id else "",
+        selected=str(selected_id) if selected_id else "",
         absence_types=ABSENCE_TYPES,
         permiso_subtypes=PERMISO_SUBTYPES,
     )
